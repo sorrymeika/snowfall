@@ -1,0 +1,17 @@
+{
+  "name": "snowfall",
+  "version": "0.0.1",
+  "description": "snowfall mvvm framework",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "dependencies": {},
+  "author": "SL",
+  "license": "ISC",
+  "devDependencies": {
+    "babel-core": "^6.24.1",
+    "babel-eslint": "^7.2.3",
+    "eslint": "^3.19.0"
+  }
+}
