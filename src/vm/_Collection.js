@@ -41,7 +41,7 @@ function endUpdate(collection) {
     return collection;
 }
 
-export class Collection {
+export default class Collection {
     constructor(parent, attributeName, array) {
         if (isArray(parent)) {
             array = parent;

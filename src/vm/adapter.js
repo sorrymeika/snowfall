@@ -1,12 +1,18 @@
 import { LINKSCHANGE_EVENT } from './consts';
+import createAttributesCompilerFactory from '../compiler/createAttributesCompilerFactory';
+import { compileEvent } from './events'
 
 var Model;
 var Collection;
+var ViewModel;
 
-export function __init__(_Model, _Collection) {
+export function __init__(_Model, _Collection, _ViewModel) {
     Model = _Model;
     Collection = _Collection;
+    ViewModel = _ViewModel;
 }
+
+export const createAttributesCompiler = createAttributesCompilerFactory([compileEvent]);
 
 export function isModel(model) {
     return model instanceof Model;
@@ -20,12 +26,16 @@ export function isModelOrCollection(model) {
     return isModel(model) || isCollection(model);
 }
 
+export function createModel(parent, attr, val) {
+    return new Model(parent, attr, val);
+}
+
 export function createCollection(parent, attr, val) {
     return new Collection(parent, attr, val);
 }
 
-export function createModel(parent, attr, val) {
-    return new Model(parent, attr, val);
+export function createViewModel(parent, attr, val) {
+    return new ViewModel(parent, attr, val);
 }
 
 export function updateReference(model) {

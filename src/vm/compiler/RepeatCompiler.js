@@ -38,7 +38,7 @@ function initCollectionKey(collection, collectionKey) {
     collection.collectionKey = collectionKey;
 }
 
-export class RepeatCompiler {
+export default class RepeatCompiler {
 
     constructor(viewModel, el, parent) {
         this.viewModel = viewModel;
