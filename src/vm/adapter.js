@@ -1,8 +1,12 @@
-import { createModelFactory, createCollectionFactory } from './factories'
 import { LINKSCHANGE_EVENT } from './consts';
 
-const Model = createModelFactory();
-const Collection = createCollectionFactory();
+var Model;
+var Collection;
+
+export function __init__(_Model, _Collection) {
+    Model = _Model;
+    Collection = _Collection;
+}
 
 export function isModel(model) {
     return model instanceof Model;
@@ -18,6 +22,10 @@ export function isModelOrCollection(model) {
 
 export function createCollection(parent, attr, val) {
     return new Collection(parent, attr, val);
+}
+
+export function createModel(parent, attr, val) {
+    return new Model(parent, attr, val);
 }
 
 export function updateReference(model) {
@@ -101,26 +109,23 @@ export function findModelByKey(model, key) {
             model = modelMap[modelKey];
 
             if (!isModelOrCollection(model)) return null;
+            if (model.key == key) return model;
 
-            if (model.key == key) {
-                return model;
-            } else {
-                var linkedParents = model._linkedParents;
-                var len;
-                if (linkedParents && (len = linkedParents.length)) {
-                    for (var i = 0; i < len; i++) {
-                        var childModelKey = linkedParents[i].childModelKey;
-                        if (key == childModelKey) {
-                            return model;
-                        } else if (key.indexOf(childModelKey + '.') == 0) {
-                            hasChild = true;
-                            key = key.substr(childModelKey.length + 1);
-                            break;
-                        }
+            var linkedParents = model._linkedParents;
+            var len;
+            if (linkedParents && (len = linkedParents.length)) {
+                for (var i = 0; i < len; i++) {
+                    var childModelKey = linkedParents[i].childModelKey;
+                    if (key == childModelKey) return model;
+
+                    if (key.indexOf(childModelKey + '.') == 0) {
+                        hasChild = true;
+                        key = key.substr(childModelKey.length + 1);
+                        break;
                     }
-                } else if (key.indexOf(model.key + '.') == 0) {
-                    hasChild = true;
                 }
+            } else if (key.indexOf(model.key + '.') == 0) {
+                hasChild = true;
             }
 
             if (hasChild && model._model) {
@@ -142,7 +147,7 @@ export function updateModelByKeys(model, renew, keys, val) {
         key = keys[i];
 
         if (!isModel(model._model[key])) {
-            tmp = model._model[key] = new Model(model, key, {});
+            tmp = model._model[key] = createModel(model, key, {});
             model.attributes[key] = tmp.attributes;
             model = tmp;
         } else {

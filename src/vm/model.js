@@ -17,7 +17,7 @@ import { DATACHANGED_EVENT } from './consts';
 
 const RE_QUERY = /(?:^|\.)([_a-zA-Z0-9]+)(\[(?:'(?:\\'|[^'])*'|"(?:\\"|[^"])*"|[^\]])+\](?:\[[\+\-]?\d*\])?)?/g;
 
-export class Model {
+export default class Model {
     constructor(parent, key, attributes) {
         if (isModel(parent)) {
             this.key = parent.key ? parent.key + '.' + key : key;
@@ -354,19 +354,15 @@ export class Model {
         !key && (key = 'collection');
 
         var result = this._(key);
-
         if (result == null) {
             this.set(key, []);
-
             return this._model[key];
         }
         return result;
     }
 
     model(key) {
-        if (!this._model[key])
-            this.set(key, {});
-
+        if (!this._model[key]) this.set(key, {});
         return this._model[key];
     }
 }
