@@ -1,5 +1,5 @@
-import { TRANSITION_END } from '../utils/dom'
-import { RE_STRING, codeRegExp } from '../utils/regex'
+import { $, TRANSITION_END } from '../../utils/dom'
+import { RE_STRING, codeRegExp } from '../../utils/regex'
 
 export const EVENTS = {
     tap: 'tap',
@@ -56,40 +56,7 @@ function isBubbleEvent(eventName) {
     }
 }
 
-export function compileEvent(viewModel, el, attr, val) {
-    //处理事件绑定
-    var evt = EVENTS[attr.slice(3)];
-    if (evt) {
-        el.removeAttribute(attr);
-        compileElementEvent(viewModel, el, evt, val);
-    }
-}
-
-function compileElementEvent(viewModel, el, evt, val) {
-    var attr = "sn-" + viewModel.cid + evt;
-    if (val == 'false') {
-        el.setAttribute(attr, val);
-    } else {
-        var content = val.replace(RE_METHOD, function (match, $1, $2) {
-            return RE_GLOBAL_METHOD.test($1)
-                ? match
-                : ($1 + $2.slice(0, -1) + ($2.length == 2 ? '' : ',') + 'e)');
-        }).replace(RE_SET, 'this.dataOfElement(e.currentTarget,\'$1\',$2)');
-
-        var fid = compileToFunction(viewModel, content, false);
-        fid && el.setAttribute(attr, fid);
-    }
-
-    switch (evt) {
-        case 'scroll':
-        case 'scrollStop':
-            (el.snEvents || (el.snEvents = [])).push(evt);
-            $(el).on(evt, viewModel._handleEvent);
-            break;
-    }
-}
-
-export function bindEvents(viewModel, $element) {
+function bindEvents(viewModel, $element) {
     var eventName;
     var eventAttr;
     var eventFn = getEventProxy(viewModel);
@@ -104,7 +71,7 @@ export function bindEvents(viewModel, $element) {
     }
 }
 
-export function unbindEvents(viewModel, $element) {
+function unbindEvents(viewModel, $element) {
     if ($element) {
         $element.off('input change blur', '[' + viewModel.eventId + ']')
             .each(function () {
@@ -132,7 +99,61 @@ export function unbindEvents(viewModel, $element) {
     }
 }
 
-export function removeEvents(viewModel) {
+function removeEvents(viewModel) {
     unbindEvents(viewModel, viewModel.$el);
     delete events[viewModel.eventId];
 }
+
+
+function compileEvent(eventCompiler, el, evt, val) {
+    var template = eventCompiler.template;
+
+    var attr = "sn-" + template.viewModel.cid + evt;
+    if (val == 'false') {
+        el.setAttribute(attr, val);
+    } else {
+        var content = val.replace(RE_METHOD, function (match, $1, $2) {
+            return RE_GLOBAL_METHOD.test($1)
+                ? match
+                : ($1 + $2.slice(0, -1) + ($2.length == 2 ? '' : ',') + 'e)');
+        }).replace(RE_SET, 'this.dataOfElement(e.currentTarget,\'$1\',$2)');
+
+        var fid = template.compileToFunction(content, false);
+        fid && el.setAttribute(attr, fid);
+    }
+
+    switch (evt) {
+        case 'scroll':
+        case 'scrollStop':
+            (el.snEvents || (el.snEvents = [])).push(evt);
+            $(el).on(evt, getEventProxy(template.viewModel));
+            break;
+    }
+}
+
+export class EventCompiler {
+    constructor(template) {
+        this.viewModel = template.viewModel;
+    }
+
+    compile($element) {
+        bindEvents(this.viewModel, $element)
+    }
+}
+
+export class EventAttributeCompiler {
+    constructor(template) {
+        this.template = template;
+        template.viewModel.on("Destory", removeEvents.bind(null, template.viewModel))
+    }
+
+    compile(el, attr, val) {
+        var evt = EVENTS[attr.slice(3)];
+        if (evt) {
+            el.removeAttribute(attr);
+            compileEvent(this, el, evt, val);
+            return true;
+        }
+    }
+}
+

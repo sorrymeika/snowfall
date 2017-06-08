@@ -1,4 +1,4 @@
-import { ELEMENT_NODE } from '../utils/dom';
+import { ELEMENT_NODE, COMMENT_NODE } from '../utils/dom';
 import { compileExpression, compileToFunction } from './compiler';
 
 const SN_REPEAT = 'sn-repeat';
@@ -36,6 +36,36 @@ function initCollectionKey(collection, collectionKey) {
     }
 
     collection.collectionKey = collectionKey;
+}
+
+export class RepeatNodeCompiler {
+    constructor(template) {
+        this.template = template;
+        this.viewModel = template.viewModel;
+    }
+
+    compile(node, nodeType) {
+        if (nodeType != COMMENT_NODE) {
+            var nextSibling;
+            if (isRepeatableNode(node)) {
+                if (node.snIf) throw new Error('can not use sn-if and sn-repeat at the same time!!please use filter instead!!');
+
+                var parentRepeatCompiler;
+                var parentNode = node;
+
+                while ((parentNode = (parentNode.snIf || parentNode).parentNode) && !parentNode.snViewModel) {
+                    if (parentNode.snRepeatCompiler) {
+                        parentRepeatCompiler = parentNode.snRepeatCompiler;
+                        break;
+                    }
+                }
+
+                nextSibling = node.nextSibling;
+                node.snRepeatCompiler = new RepeatCompiler(viewModel, node, parentRepeatCompiler);
+            }
+            return { nextSibling: nextSibling }
+        }
+    }
 }
 
 export default class RepeatCompiler {
