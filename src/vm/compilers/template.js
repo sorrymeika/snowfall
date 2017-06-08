@@ -94,7 +94,7 @@ export class TemplateCompiler {
             var attrName = snAttributes[i];
             var val = this.executeFunction(snAttributes[i + 1], nodeData.data);
 
-            if (attributesCompiler.beforeUpdate(el, attrName, val) === false) {
+            if (attributesCompiler.beforeUpdate(nodeData, attrName, val) === false) {
                 continue;
             }
 

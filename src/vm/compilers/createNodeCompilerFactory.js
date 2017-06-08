@@ -9,6 +9,14 @@ export default function createNodeCompilerFactory(compilers) {
             this.nodeType = node.nodeType;
         }
 
+        setRef(_ref) {
+            this._ref = _ref;
+        }
+
+        get ref() {
+            return this._ref;
+        }
+
         get data() {
             return this._data
                 ? this._data

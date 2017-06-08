@@ -41,7 +41,8 @@ function initCollectionKey(template, compiler, collectionKey) {
 }
 
 
-function updateRepeatView(template, el) {
+function updateRepeatView(template, nodeData) {
+    var el = nodeData.el;
     var viewModel = template.viewModel;
     var repeatCompiler = el.snRepeatCompiler;
     var collection = el.snCollection;
@@ -196,13 +197,18 @@ function updateRepeatView(template, el) {
         repeatCompiler.loopIndexAlias && (elem.snData[repeatCompiler.loopIndexAlias] = index);
     });
 
+    var refs = [];
     // 移除过滤掉的element
     for (var i = 0; i < elementsLength; i++) {
+        var elem = elements[i];
         if (!elemContain[i]) {
-            var elem = elements[i];
             elem.parentNode && elem.parentNode.removeChild(elem);
+        } else {
+            refs.push(elem);
         }
     }
+
+    nodeData.setRef(refs);
 
     return cursorElem;
 }
@@ -261,7 +267,7 @@ export class RepeatNodeCompiler {
     update(nodeData) {
         var node = nodeData.node;
         if (node.nodeType == COMMENT_NODE && node.snRepeatCompiler) {
-            updateRepeatView(this.template, node);
+            updateRepeatView(this.template, nodeData);
             return true;
         }
     }

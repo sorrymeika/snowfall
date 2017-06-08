@@ -1,17 +1,8 @@
 import { TEXT_NODE, ELEMENT_NODE } from '../../utils/dom'
 import { camelCase } from '../utils/string'
-import { setRef } from './ref'
 
 const registedComponents = {};
 
-export class ComponentAttributeCompiler {
-    beforeUpdate(el, attrName, val) {
-        if (attrName == 'ref' && typeof val === 'function') {
-            !el.snComponent && val(el.snComponentInstance || el);
-            return false
-        }
-    }
-}
 
 export class ComponentCompiler {
     constructor(template) {
@@ -52,7 +43,9 @@ export class ComponentCompiler {
 
         if (el.snComponentInstance) {
             el.snComponentInstance.set(props);
-        } else {
+
+            nodeData.setRef(instance);
+        } else if (el.snComponent) {
             var children = [];
             var node;
             var snComponent = el.snComponent;
@@ -80,7 +73,8 @@ export class ComponentCompiler {
 
             el.snComponentInstance = instance;
             delete el.snComponent;
+
+            nodeData.setRef(instance);
         }
-        setRef(viewModel, el);
     }
 }

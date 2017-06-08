@@ -21,10 +21,10 @@ export default function createAttributeCompilerFactory(Compilers) {
             this.compile(el, attr, val);
         }
 
-        beforeUpdate(el, attr, val) {
+        beforeUpdate(nodeData, attr, val) {
             var updaters = this.beforeUpdaters;
             for (var i = 0; i < updaters.length; i++) {
-                if (updaters[i].beforeUpdate(el, attr, val) === false) {
+                if (updaters[i].beforeUpdate(nodeData, attr, val) === false) {
                     return false;
                 }
             }
