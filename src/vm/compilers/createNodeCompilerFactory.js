@@ -7,6 +7,7 @@ export default function createNodeCompilerFactory(compilers) {
             this.template = template;
             this.node = node;
             this.nodeType = node.nodeType;
+            this._ref = node;
         }
 
         setRef(_ref) {
@@ -49,17 +50,14 @@ export default function createNodeCompilerFactory(compilers) {
                 }
             }
 
-            if (node.nodeType == ELEMENT_NODE) {
-                if (!res || res.shouldUpdateAttributes) {
-                    this.template.updateAttributes(nodeData);
-                }
+            if (node.nodeType == ELEMENT_NODE && (!res || res.shouldUpdateAttributes)) {
+                this.template.updateAttributes(nodeData);
             }
-
             return res;
         }
     }
 
-    return function createNodeCompiler(templateCompiler, el, isComponent) {
-        return new NodeCompiler(templateCompiler, el, isComponent);
+    return function createNodeCompiler(templateCompiler) {
+        return new NodeCompiler(templateCompiler);
     }
 }

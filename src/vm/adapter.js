@@ -56,7 +56,7 @@ export function updateViewNextTick(model) {
             }
             model = model.parent;
         }
-    }).render();
+    }).renderNextTick();
 
     return model;
 }
@@ -102,7 +102,7 @@ export function linkModels(model, child, key) {
         childRoot: childRoot,
         model: model,
         cb: function () {
-            root.render();
+            root.renderNextTick();
         }
     };
     var unlink = function () {

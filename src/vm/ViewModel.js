@@ -50,15 +50,12 @@ export default class ViewModel extends Model {
 
         this.compiler = new TemplateCompiler(this);
         this.children = children ? [].concat(children) : [];
-
         this.eventId = 'sn-' + this.cid + 'model';
-
         this.repeats = {};
-        this.refs = {};
 
         template && this.template(template);
 
-        this.initialize.call(this, attributes);
+        this.initialize && this.initialize(attributes);
     }
 
     template(el) {
@@ -96,32 +93,17 @@ export default class ViewModel extends Model {
         return model.get(attrs);
     }
 
-    getRefs(names) {
-        return Promise.all(names.map(name => this.getRef(name)))
-    }
-
-    getRef(name) {
-        return this.refs[name] || new Promise((resolve) => {
-            this.onceTrue('viewDidUpdate', () => {
-                if (this.refs[name]) {
-                    resolve.call(this, this.refs[name]);
-                    return true;
-                }
-            });
-        })
-    }
-
     nextTick(cb) {
         return this._nextTick || this._rendering ? this.one('viewDidUpdate', cb) : cb.call(this);
     }
 
-    render() {
+    renderNextTick() {
         if (!this._nextTick) {
-            this._nextTick = this._rendering ? 1 : nextTick(this._render);
+            this._nextTick = this._rendering ? 1 : nextTick(this.render);
         }
     }
 
-    _render() {
+    render() {
         this._rendering = true;
         this.viewWillUpdate && this.viewWillUpdate();
 
@@ -135,7 +117,6 @@ export default class ViewModel extends Model {
             }));
 
             this._nextTick = null;
-            this.refs = {};
 
             this.$el && eachElement(this.$el, (el) => {
                 if ((el.snViewModel && el.snViewModel != this) || this._nextTick) return false;
@@ -160,7 +141,6 @@ export default class ViewModel extends Model {
 
 ViewModel.prototype.next = ViewModel.prototype.nextTick;
 
-
 function checkOwnNode(viewModel, node) {
     if (typeof node == 'string') {
         node = viewModel.$el.find(node);
@@ -183,7 +163,7 @@ function compileNewTemplate(viewModel, template) {
     });
 
     viewModel.compiler.compile(viewModel, $element);
-    viewModel.render();
+    viewModel.renderNextTick();
 
     return $element;
 }

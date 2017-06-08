@@ -114,10 +114,12 @@ export class IfCompiler {
         var node = nodeData.node;
 
         if (node.snIfSource) {
-            return {
+            return new NodeUpdateResult({
                 isSkipChildNodes: true,
+                isBreak: true,
+                shouldUpdateAttributes: false,
                 nextSibling: node.snIfSource
-            };
+            });
         } else if (node.snIf) {
             switch (node.snIfType) {
                 case "sn-else":

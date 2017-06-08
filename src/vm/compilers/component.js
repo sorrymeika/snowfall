@@ -44,7 +44,7 @@ export class ComponentCompiler {
         if (el.snComponentInstance) {
             el.snComponentInstance.set(props);
 
-            nodeData.setRef(instance);
+            nodeData.setRef(el.snComponentInstance);
         } else if (el.snComponent) {
             var children = [];
             var node;

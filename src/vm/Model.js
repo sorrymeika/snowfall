@@ -45,7 +45,7 @@ export default class Model {
         this.attributes = this.type == 'object' ? extend({}, this.attributes, attributes) : undefined;
 
         this._model = {};
-        this._render = this._render.bind(this);
+        this.render = this.render.bind(this);
 
         this.changed = false;
 
@@ -376,13 +376,13 @@ export default class Model {
         return this._model[key];
     }
 
-    render() {
+    renderNextTick() {
         if (!this._nextTick) {
-            this._nextTick = nextTick(this._render);
+            this._nextTick = nextTick(this.render);
         }
     }
 
-    _render() {
+    render() {
         this.trigger(new Event(DATACHANGED_EVENT, {
             target: this
         }));
