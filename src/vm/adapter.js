@@ -1,7 +1,5 @@
-import { LINKSCHANGE_EVENT } from './consts';
-import createAttributeCompilerFactory from './compilers/createAttributeCompilerFactory';
-import createNodeCompilerFactory from './compilers/createNodeCompilerFactory';
-import { EventCompiler, EventAttributeCompiler } from './compilers/events'
+
+import { DATACHANGED_EVENT, LINKSCHANGE_EVENT } from './consts';
 
 var Model;
 var Collection;
@@ -12,9 +10,6 @@ export function __init__(_Model, _Collection, _ViewModel) {
     Collection = _Collection;
     ViewModel = _ViewModel;
 }
-
-export const createAttributeCompiler = createAttributeCompilerFactory([EventAttributeCompiler]);
-export const createNodeCompiler = createNodeCompilerFactory([EventCompiler]);
 
 export function isModel(model) {
     return model instanceof Model;
@@ -38,6 +33,32 @@ export function createCollection(parent, attr, val) {
 
 export function createViewModel(parent, attr, val) {
     return new ViewModel(parent, attr, val);
+}
+
+export function updateViewNextTick(model) {
+    if (model.changed) return model;
+    model.changed = true;
+
+    if (isCollection(model.parent)) {
+        updateViewNextTick(model.parent);
+    }
+
+    var root = model.root;
+    root.one(DATACHANGED_EVENT, function () {
+        model.changed = false;
+        model.key && root.trigger(new Event(DATACHANGED_EVENT + ":" + model.key, {
+            target: model
+        }));
+
+        while (model) {
+            if (model._linkedParents && model._linkedParents.length) {
+                root.trigger(LINKSCHANGE_EVENT + ":" + model.cid);
+            }
+            model = model.parent;
+        }
+    }).render();
+
+    return model;
 }
 
 export function updateReference(model) {
@@ -72,37 +93,45 @@ export function updateReference(model) {
     }
 }
 
-export function linkModels(model, value, key) {
+export function linkModels(model, child, key) {
     var root = model.root;
+    var childRoot = child.root;
     var link = {
         childModelKey: key,
-        childModel: value,
-        childRoot: value.root,
+        childModel: child,
+        childRoot: childRoot,
         model: model,
         cb: function () {
             root.render();
         }
     };
+    var unlink = function () {
+        unlinkModels(model, child);
+        root.off('destroy', unlink);
+        childRoot.off('destroy', unlink);
+    }
 
-    value.root.on(LINKSCHANGE_EVENT + ":" + value.cid, link.cb);
+    root.on('destroy', unlink);
+    childRoot.on('destroy', unlink)
+        .on(LINKSCHANGE_EVENT + ":" + child.cid, link.cb);
 
-    (value._linkedParents || (value._linkedParents = [])).push(link);
+    (child._linkedParents || (child._linkedParents = [])).push(link);
     (root._linkedModels || (root._linkedModels = [])).push(link);
 }
 
-export function unlinkModels(model, value) {
+export function unlinkModels(model, child) {
     var root = model.root;
     var link;
     var linkedModels = root._linkedModels;
-    var linkedParents = value._linkedParents;
+    var linkedParents = child._linkedParents;
 
     if (linkedModels && linkedParents) {
         for (var i = linkedModels.length - 1; i >= 0; i--) {
             link = linkedModels[i];
-            if (link.model == model && link.childModel == value) {
+            if (link.model == model && link.childModel == child) {
                 linkedModels.splice(i, 1);
-                linkedParents.splice(linkedParents.indexOf(link));
-                value.root.off(LINKSCHANGE_EVENT + ":" + value.cid, link.cb);
+                linkedParents.splice(linkedParents.indexOf(link), 1);
+                child.root.off(LINKSCHANGE_EVENT + ":" + child.cid, link.cb);
                 break;
             }
         }

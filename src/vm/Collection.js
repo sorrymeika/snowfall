@@ -5,12 +5,11 @@ import { extend } from '../utils/clone'
 import {
     isModel,
     updateReference,
+    updateViewNextTick,
     createModel,
-    createViewModel,
     linkModels,
     unlinkModels
 } from './adapter'
-import { updateViewNextTick } from './updater'
 
 var RE_COLL_QUERY = /\[((?:'(?:\\'|[^'])*'|"(?:\\"|[^"])*"|[^\]])+)\](?:\[([\+\-]?)(\d+)?\])?(?:\.(.*))?/;
 
@@ -48,7 +47,7 @@ export default class Collection {
             parent = null;
         }
 
-        if (!parent) parent = new createViewModel();
+        if (!parent) parent = new createModel();
 
         if (!attributeName) attributeName = "$list";
 

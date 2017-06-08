@@ -3,6 +3,6 @@ import Collection from './collection';
 import ViewModel from './viewModel';
 import { __init__ } from './adapter';
 
-__init__(Model, Collection);
+__init__(Model, Collection, ViewModel);
 
-export { ViewModel, ViewModel as Model, Collection }
+export { ViewModel, Model, Collection }

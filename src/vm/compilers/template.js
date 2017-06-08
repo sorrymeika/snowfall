@@ -1,18 +1,16 @@
-import { TEXT_NODE, ELEMENT_NODE, COMMENT_NODE, eachElement } from '../utils/dom'
+import { isArray, isNo } from '../utils/is'
+import { $, TEXT_NODE, ELEMENT_NODE, eachElement, insertElementAfter, fade } from '../utils/dom'
 
-
-import { createAttributeCompiler, createNodeCompiler, createCompiler } from '../adapter'
-import RepeatCompiler, { isRepeatableNode } from './RepeatCompiler'
+import compilers from './compilers'
 import FunctionCompiler from './FunctionCompiler'
-
 
 export class TemplateCompiler {
     constructor(viewModel) {
         this.viewModel = viewModel;
-        this.compiler = createCompiler(this);
-        this.nodeCompiler = createNodeCompiler(this);
         this.functionCompiler = new FunctionCompiler(viewModel);
-        this.attributesCompiler = createAttributeCompiler(this);
+        this.compiler = compilers.createCompiler(this);
+        this.nodeCompiler = compilers.createNodeCompiler(this);
+        this.attributesCompiler = compilers.createAttributeCompiler(this);
     }
 
     compile($element) {
@@ -20,7 +18,6 @@ export class TemplateCompiler {
 
         eachElement($element, (node) => {
             if (node.snViewModel && node.snViewModel != viewModel) return false;
-
             return this.compileNode(viewModel, node);
         });
 
@@ -42,101 +39,192 @@ export class TemplateCompiler {
                 node.textContent = '';
             }
             return;
-        }
-
-        var result = this.nodeCompiler.reduce(node, nodeType);
-
-        if (node.nodeType != COMMENT_NODE) {
-            var nextSibling;
-            if (isRepeatableNode(node)) {
-                if (node.snIf) throw new Error('can not use sn-if and sn-repeat at the same time!!please use filter instead!!');
-
-                var parentRepeatCompiler;
-                var parentNode = node;
-
-                while ((parentNode = (parentNode.snIf || parentNode).parentNode) && !parentNode.snViewModel) {
-                    if (parentNode.snRepeatCompiler) {
-                        parentRepeatCompiler = parentNode.snRepeatCompiler;
-                        break;
-                    }
-                }
-
-                nextSibling = node.nextSibling;
-                node.snRepeatCompiler = new RepeatCompiler(viewModel, node, parentRepeatCompiler);
-            } else if (node.snIf) {
-                nextSibling = node.snIf.nextSibling
-            }
-
-            return { nextSibling: nextSibling }
-        }
-
-        if (nodeType == ELEMENT_NODE) {
+        } else if (nodeType == ELEMENT_NODE) {
+            var result = this.nodeCompiler.reduce(node);
             this.compileAttributes(node, !!componentName);
+            return result;
         }
-
-        return result;
     }
 
-    compileToFunction(expression, withBraces) {
-        return this.functionCompiler.push(expression, withBraces);
-    }
-
-    compileAttributes(el, isComponent) {
+    compileAttributes(el) {
         var attr;
         var val;
+        var attributes = el.attributes;
+        var attributesCompiler = this.attributesCompiler;
 
-        for (var i = el.attributes.length - 1; i >= 0; i--) {
-            attr = el.attributes[i].name;
-            val = el.attributes[i].value;
-
-            this.attributesCompiler.reduce(el, attr, val);
-
-            if (attr == 'sn-else') {
-                initIfElement(el, attr);
-            } else if ((val = el.attributes[i].value)) {
+        for (var i = attributes.length - 1; i >= 0; i--) {
+            val = attributes[i].value;
+            if (val) {
+                attr = attributes[i].name;
                 if (attr.slice(0, 3) === "sn-") {
                     switch (attr) {
-                        case 'sn-if':
-                        case 'sn-else-if':
-                            initIfElement(el, attr);
-                            el.snIfFid = this.compileToFunction(val.charAt(0) == '{' && val.slice(-1) == '}'
-                                ? val.slice(1, -1)
-                                : val,
-                                false);
-                            break;
                         case 'sn-src':
                         case 'sn-html':
                         case 'sn-display':
                         case 'sn-style':
                         case 'sn-css':
-                            compileAttribute(viewModel, el, attr, val, val.indexOf("{") != -1 && val.lastIndexOf("}") != -1);
-                            break;
-                        case 'sn-model':
-                            el.removeAttribute(attr);
-                            el.setAttribute(viewModel.snModelKey, val);
+                            attributesCompiler.compile(el, attr, val, val.indexOf("{") != -1 && val.lastIndexOf("}") != -1);
                             break;
                         default:
                             attributesCompiler.reduce(el, attr, val);
                             break;
                     }
-                } else if (attr == "ref" && !isComponent) {
-                    viewModel.refs[val] = el;
+                } else if (attr == "ref" && !el.snComponent) {
+                    this.viewModel.refs[val] = el;
                 } else {
                     attributesCompiler.compile(el, attr, val);
                 }
             }
         }
     }
+
+    updateNode(node) {
+        return this.nodeCompiler.update(node);
+    }
+
+    updateAttributes(nodeData) {
+        var el = nodeData.node;
+        var snAttributes = el.snAttributes;
+        if (!snAttributes) return;
+
+        var snValues = (el.snValues || (el.snValues = []));
+        var attributesCompiler = this.attributesCompiler;
+
+        for (var i = 0, n = snAttributes.length; i < n; i += 2) {
+            var attrName = snAttributes[i];
+            var val = this.executeFunction(snAttributes[i + 1], nodeData.data);
+
+            if (attributesCompiler.beforeUpdate(el, attrName, val) === false) {
+                continue;
+            }
+
+            if (snValues[i / 2] === val) continue;
+            snValues[i / 2] = val;
+
+            switch (attrName) {
+                case 'textContent':
+                    updateTextNode(el, val);
+                    break;
+                case 'value':
+                    if (el.tagName === 'INPUT' || el.tagName === 'SELECT' || el.tagName === 'TEXTAREA') {
+                        if (el.value != val || (el.value === '' && val === 0)) {
+                            el.value = val;
+                        }
+                    } else
+                        el.setAttribute(attrName, val);
+                    break;
+                case 'html':
+                case 'sn-html':
+                    el.innerHTML = val;
+                    break;
+                case 'sn-visible':
+                case 'display':
+                    el.style.display = isNo(val) ? 'none' : val == 'block' || val == 'inline' || val == 'inline-block' ? val : '';
+                    break;
+                case 'sn-display':
+                    fade(el, val);
+                    break;
+                case 'classname':
+                case 'class':
+                    el.className = val;
+                    break;
+                case 'sn-css':
+                    el.style.cssText += val;
+                    break;
+                case 'sn-style':
+                case 'style':
+                    el.style.cssText = val;
+                    break;
+                case 'checked':
+                case 'selected':
+                case 'disabled':
+                    (el[attrName] = !!val) ? el.setAttribute(attrName, attrName) : el.removeAttribute(attrName);
+                    break;
+                case 'src':
+                    el.src = val;
+                    break;
+                case 'sn-src':
+                    if (val) {
+                        if (el.src) {
+                            el.src = val;
+                        } else {
+                            $(el).one('load error', function (e) {
+                                $(this).animate({
+                                    opacity: 1
+                                }, 200);
+                                if (e.type === 'error') el.removeAttribute('src');
+                            }).css({
+                                opacity: 0
+                            }).attr({
+                                src: val
+                            });
+                        }
+                    } else {
+                        el.removeAttribute('src');
+                    }
+                    break;
+                default:
+                    val === null ? el.removeAttribute(attrName) : el.setAttribute(attrName, val);
+                    break;
+            }
+
+            attributesCompiler.update(el, attrName, val)
+        }
+    }
+
+    compileToFunction(expression, withBraces) {
+        return this.functionCompiler.push(expression, withBraces);
+    }
+
+    executeFunction(fid, data) {
+        return this.functionCompiler.executeFunction(fid, data);
+    }
+
+    getFunctionArg(fid, data) {
+        return this.functionCompiler.getFunctionArg(fid, data);
+    }
 }
 
-function initIfElement(el, type) {
-    var snIf = document.createComment(type);
-    snIf.snIfSource = el;
-    el.snIf = snIf;
-    el.snIfType = snIf.snIfType = type;
-    if (el.snViewModel) snIf.snViewModel = el.snViewModel;
-    if (el.parentNode) {
-        el.parentNode.insertBefore(snIf, el);
-        el.parentNode.removeChild(el);
+function updateTextNode(el, val) {
+    var removableTails = el.snTails;
+    if (isArray(val) || (typeof val === 'object' && val.nodeType && (val = [val]))) {
+        var node = el;
+        var newTails = [];
+
+        val.forEach(function (item) {
+            if (node.nextSibling !== item) {
+                if (
+                    item.nodeType || (
+                        (!node.nextSibling ||
+                            node.nextSibling.nodeType !== TEXT_NODE ||
+                            node.nextSibling.textContent !== "" + item) &&
+                        (item = document.createTextNode(item))
+                    )
+                ) {
+                    insertElementAfter(node, item);
+                } else {
+                    item = node.nextSibling;
+                }
+            }
+            if (removableTails) {
+                var index = removableTails.indexOf(item);
+                if (index !== -1) {
+                    removableTails.splice(index, 1);
+                }
+            }
+            node = item;
+            newTails.push(item);
+        });
+
+        el.textContent = '';
+        el.snTails = newTails;
+    } else {
+        el.textContent = val;
+        el.snTails = null;
+    }
+    if (removableTails) {
+        removableTails.forEach(function (tail) {
+            if (tail.parentNode) tail.parentNode.removeChild(tail);
+        });
     }
 }

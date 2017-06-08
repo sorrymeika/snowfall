@@ -1,13 +1,15 @@
 import { isArray, isPlainObject, isThenable } from '../utils/is'
 import { extend, cloneDeep } from '../utils/clone'
+import nextTick from '../utils/nextTick'
 import { identify } from '../utils/guid'
-import { updateViewNextTick } from './updater'
+import { EventEmitter } from '../core/events'
 import {
     isModel,
     isCollection,
     isModelOrCollection,
     updateReference,
     updateModelByKeys,
+    updateViewNextTick,
     linkModels,
     unlinkModels,
     createCollection
@@ -19,24 +21,32 @@ const RE_QUERY = /(?:^|\.)([_a-zA-Z0-9]+)(\[(?:'(?:\\'|[^'])*'|"(?:\\"|[^"])*"|[
 
 export default class Model {
     constructor(parent, key, attributes) {
-        if (isModel(parent)) {
-            this.key = parent.key ? parent.key + '.' + key : key;
-            this._key = key;
-        } else if (isCollection(parent)) {
-            this.key = parent.key + '^child';
-            this._key = parent._key + '^child';
+
+        if (arguments.length == 1) {
+            this.root = this;
+            attributes = parent;
         } else {
-            throw new Error('Model\'s parent mast be Collection or Model');
+            if (isModel(parent)) {
+                this.key = parent.key ? parent.key + '.' + key : key;
+                this._key = key;
+            } else if (isCollection(parent)) {
+                this.key = parent.key + '^child';
+                this._key = parent._key + '^child';
+            } else {
+                throw new Error('Model\'s parent mast be Collection or Model');
+            }
+            this.parent = parent;
+            this.root = parent.root;
         }
 
         this.cid = identify();
 
-        this.type = typeof attributes == 'object' ? 'object' : 'value';
-        this.attributes = this.type == 'object' ? {} : undefined;
+        this.type = typeof attributes;
+        this.attributes = this.type == 'object' ? extend({}, this.attributes, attributes) : undefined;
 
         this._model = {};
-        this.parent = parent;
-        this.root = parent.root;
+        this._render = this._render.bind(this);
+
         this.changed = false;
 
         this.set(attributes);
@@ -365,4 +375,18 @@ export default class Model {
         if (!this._model[key]) this.set(key, {});
         return this._model[key];
     }
+
+    render() {
+        if (!this._nextTick) {
+            this._nextTick = nextTick(this._render);
+        }
+    }
+
+    _render() {
+        this.trigger(new Event(DATACHANGED_EVENT, {
+            target: this
+        }));
+    }
 }
+
+Object.assign(Model.prototype, EventEmitter.prototype)

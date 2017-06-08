@@ -1,7 +1,17 @@
-import { ELEMENT_NODE } from '../../utils/dom'
+import { TEXT_NODE, ELEMENT_NODE } from '../../utils/dom'
 import { camelCase } from '../utils/string'
+import { setRef } from './ref'
 
 const registedComponents = {};
+
+export class ComponentAttributeCompiler {
+    beforeUpdate(el, attrName, val) {
+        if (attrName == 'ref' && typeof val === 'function') {
+            !el.snComponent && val(el.snComponentInstance || el);
+            return false
+        }
+    }
+}
 
 export class ComponentCompiler {
     constructor(template) {
@@ -32,5 +42,45 @@ export class ComponentCompiler {
                 node.snProps = this.template.compileToFunction(propsVal);
             }
         }
+    }
+
+    update(nodeData) {
+        var viewModel = this.viewModel;
+        var el = nodeData.node;
+        var fid = el.snProps;
+        var props = !fid ? null : this.template.executeFunction(fid, nodeData.data);
+
+        if (el.snComponentInstance) {
+            el.snComponentInstance.set(props);
+        } else {
+            var children = [];
+            var node;
+            var snComponent = el.snComponent;
+            var instance;
+
+            for (var i = 0, j = el.childNodes.length - 1; i < j; i++) {
+                node = el.childNodes[i];
+
+                if (node.nodeType !== TEXT_NODE || !/^\s*$/.test(node.textContent)) {
+                    children.push(node);
+                    node.snViewModel = viewModel;
+                    viewModel.$el.push(node);
+                }
+            }
+            if (typeof snComponent === 'function') {
+                instance = new snComponent(props, children);
+            } else {
+                instance = snComponent;
+                if (typeof instance.children === 'function') {
+                    instance.children(children);
+                }
+                instance.set(props);
+            }
+            instance.$el.appendTo(el);
+
+            el.snComponentInstance = instance;
+            delete el.snComponent;
+        }
+        setRef(viewModel, el);
     }
 }

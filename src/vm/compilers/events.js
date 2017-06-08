@@ -57,6 +57,33 @@ function isBubbleEvent(eventName) {
 }
 
 function bindEvents(viewModel, $element) {
+    $element.on('input change blur', '[' + viewModel.eventId + ']', function (e) {
+        var target = e.currentTarget;
+
+        switch (e.type) {
+            case 'change':
+            case 'blur':
+                switch (target.tagName) {
+                    case 'TEXTAREA':
+                        return;
+                    case 'INPUT':
+                        switch (target.type) {
+                            case 'hidden':
+                            case 'radio':
+                            case 'checkbox':
+                            case 'file':
+                                break;
+                            default:
+                                return;
+                        }
+                        break;
+                }
+                break;
+        }
+
+        viewModel.dataOfElement(target, target.getAttribute(viewModel.eventId), target.value);
+    });
+
     var eventName;
     var eventAttr;
     var eventFn = getEventProxy(viewModel);
@@ -104,7 +131,6 @@ function removeEvents(viewModel) {
     delete events[viewModel.eventId];
 }
 
-
 function compileEvent(eventCompiler, el, evt, val) {
     var template = eventCompiler.template;
 
@@ -141,18 +167,37 @@ export class EventCompiler {
     }
 }
 
+export class EventNodeCompiler {
+}
+
 export class EventAttributeCompiler {
     constructor(template) {
         this.template = template;
-        template.viewModel.on("Destory", removeEvents.bind(null, template.viewModel))
+        this.eventId = template.viewModel.eventId;
+        template.viewModel.on("destroy", removeEvents.bind(null, template.viewModel))
     }
 
     compile(el, attr, val) {
+        if (attr == 'sn-model') {
+            el.removeAttribute(attr);
+            el.setAttribute(this.eventId, val);
+            return true;
+        }
+
         var evt = EVENTS[attr.slice(3)];
         if (evt) {
             el.removeAttribute(attr);
             compileEvent(this, el, evt, val);
             return true;
+        }
+    }
+
+    update(el, attr, val) {
+        if (attr == 'sn-src' && val) {
+            var viewModel = this.template.viewModel;
+            if (el.getAttribute('sn-' + viewModel.cid + 'load') || el.getAttribute('sn-' + viewModel.cid + 'error')) {
+                $(el).one('load error', getEventProxy(viewModel));
+            }
         }
     }
 }

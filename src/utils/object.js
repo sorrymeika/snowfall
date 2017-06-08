@@ -81,3 +81,14 @@ export function contains(parent, obj) {
     }
     return true;
 }
+
+export function value(data, names) {
+    if (typeof names === 'string')
+        names = names.split('.');
+
+    for (var i = 0, len = names.length; i < len; i++) {
+        data = data[names[i]];
+    }
+
+    return data;
+}
