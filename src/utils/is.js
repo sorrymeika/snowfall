@@ -11,7 +11,11 @@ export const isObject = is("Object")
 export const isArray = Array.isArray || is("Array");
 
 export function isString(str) {
-    return typeof str == 'string' || is("String");
+    return typeof str == 'string' || toString.call(str) == "[object String]";
+}
+
+export function isNumber(str) {
+    return typeof str == 'number' || toString.call(str) == "[object Number]";
 }
 
 export function isFunction(fn) {

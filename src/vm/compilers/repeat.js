@@ -2,6 +2,7 @@ import { $, ELEMENT_NODE, COMMENT_NODE, cloneElement, closestElement, insertElem
 import compileExpression from './compileExpression'
 import { findModelByKey, createCollection } from '../adapter'
 import { value as valueOfObject } from '../../utils/object'
+import { isNumber } from '../../utils/is'
 
 const SN_REPEAT = 'sn-repeat';
 
@@ -153,7 +154,7 @@ function updateRepeatView(template, nodeData) {
             default:
                 // orderBy=['a',true,someFunctionId,false]
                 orderBy = orderBy.map(function (item) {
-                    if (typeof item === 'number') {
+                    if (isNumber(item)) {
                         return template.executeFunction(item, template.getFunctionArg(el, parentSNData));
                     }
                     return item;
@@ -174,8 +175,10 @@ function updateRepeatView(template, nodeData) {
 
                         // 中文排序需使用 localeCompare
                         // ret = isDesc ? (a > b ? -1 : a < b ? 1 : 0) : (a > b ? 1 : a < b ? -1 : 0);
-                        ret = ((a === undefined || a === null) ? '' : (a + '')).localeCompare(b);
-                        isDesc && (ret = !ret);
+                        ret = isNumber(a) && isNumber(b)
+                            ? a - b
+                            : ((a === undefined || a === null) ? '' : (a + '')).localeCompare(b);
+                        isDesc && (ret *= -1);
 
                         if (ret != 0) return ret;
                     }

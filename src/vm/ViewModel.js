@@ -107,10 +107,9 @@ export default class ViewModel extends Model {
         this._rendering = true;
         this.viewWillUpdate && this.viewWillUpdate();
 
-        console.time('render-' + this.cid);
-
         var compiler = this.compiler;
 
+        console.time('render-' + this.cid);
         do {
             this.trigger(new Event(DATACHANGED_EVENT, {
                 target: this
@@ -125,11 +124,9 @@ export default class ViewModel extends Model {
             });
 
         } while (this._nextTick);
-
         console.timeEnd('render-' + this.cid);
 
         this._rendering = false;
-
         this.trigger('viewDidUpdate');
         this.viewDidUpdate && this.viewDidUpdate();
     }
