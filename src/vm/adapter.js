@@ -61,35 +61,35 @@ export function updateViewNextTick(model) {
     return model;
 }
 
-export function updateReference(model) {
-    var value = isCollection(model) ? model.array : model.attributes;
-    var parents = model._linkedParents
-        ? model._linkedParents.map(function (item) {
-            return item.model;
-        })
-        : [];
-
-    if (model.parent) parents.push(model.parent);
-
-    for (var i = 0; i < parents.length; i++) {
-        var parent = parents[i];
-
-        if (isCollection(parent)) {
-            var index = parent.indexOf(model);
-            if (index != -1 && parent.array[index] !== value) {
-                if (!parent._isSetting) {
-                    parent.array = parent.array.slice();
-                    updateReference(parent);
-                }
-                parent.array[index] = value;
-            }
-        } else if (parent.attributes[model._key] !== value) {
+function updateReferenceByKey(parent, model, key, value) {
+    if (isCollection(parent)) {
+        var index = parent.indexOf(model);
+        if (index != -1 && parent.array[index] !== value) {
             if (!parent._isSetting) {
-                parent.attributes = Object.assign({}, parent.attributes);
+                parent.array = parent.array.slice();
                 updateReference(parent);
             }
-            parent.attributes[model._key] = value;
+            parent.array[index] = value;
         }
+    } else if (parent.attributes[key] !== value) {
+        if (!parent._isSetting) {
+            parent.attributes = Object.assign({}, parent.attributes);
+            updateReference(parent);
+        }
+        parent.attributes[key] = value;
+    }
+}
+
+export function updateReference(model) {
+    var value = isCollection(model) ? model.array : model.attributes;
+
+    if (model._linkedParents) {
+        model._linkedParents.forEach((item) => {
+            updateReferenceByKey(item.model, model, item.childModelKey, value);
+        })
+    }
+    if (model.parent) {
+        updateReferenceByKey(model.parent, model, model._key, value);
     }
 }
 
