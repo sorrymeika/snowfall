@@ -174,7 +174,6 @@ function updateRepeatView(template, nodeData) {
                         b = bm[sort];
 
                         // 中文排序需使用 localeCompare
-                        // ret = isDesc ? (a > b ? -1 : a < b ? 1 : 0) : (a > b ? 1 : a < b ? -1 : 0);
                         ret = isNumber(a) && isNumber(b)
                             ? a - b
                             : ((a === undefined || a === null) ? '' : (a + '')).localeCompare(b);
