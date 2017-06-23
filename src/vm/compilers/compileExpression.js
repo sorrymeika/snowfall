@@ -22,6 +22,9 @@ const KEYWORDS = {
 };
 
 var RE_MATCH_EXPRESSION = codeRegExp("{...}", 'g');
+var RE_EXPRESSION = /'(?:(?:\\{2})+|\\'|[^'])*'|"(?:(?:\\{2})+|\\"|[^"])*\"|\bvar\s+('(?:(?:\\{2})+|\\'|[^'])*'|[^;]+);|(?:\{|,)\s*[\w$]+\s*:\s*|([\w$]+)\(|function\s*\(.*?\)|([\w$]+(?:\.[\w$]+|\[[\w$\']+\])*)(\()?/g;
+var RE_VARS = /([\w$]+)\s*(?:=(?:'(?:\\'|[^'])*'|[^;,]+))?/g;
+var RE_VALUE = /^(-?\d+(\.\d+)?|true|false|undefined|null|'(?:\\'|[^'])*')$/;
 
 /**
  * 将字符串表达式转为function code
@@ -79,10 +82,6 @@ export default function compileExpression(expression, withBraces) {
         variables: variables
     };
 }
-
-var RE_EXPRESSION = /'(?:(?:\\{2})+|\\'|[^'])*'|"(?:(?:\\{2})+|\\"|[^"])*\"|\bvar\s+('(?:(?:\\{2})+|\\'|[^'])*'|[^;]+);|(?:\{|,)\s*[\w$]+\s*:\s*|([\w$]+)\(|function\s*\(.*?\)|([\w$]+(?:\.[\w$]+|\[[\w$]+\])*)(\()?/g;
-var RE_VARS = /([\w$]+)\s*(?:=(?:'(?:\\'|[^'])*'|[^;,]+))?/g;
-var RE_VALUE = /^(-?\d+|true|false|undefined|null|'(?:\\'|[^'])*')$/;
 
 function parseExpression(expression, variables) {
     return expression.replace(RE_EXPRESSION, function (match, vars, fn, name, lastIsFn) {

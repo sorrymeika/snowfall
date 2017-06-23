@@ -1,4 +1,5 @@
 import { isArray, isPlainObject } from '../utils/is'
+import * as objectUtils from '../utils/object'
 import nextTick from '../utils/nextTick'
 import { $, eachElement } from '../utils/dom'
 import Model from './Model'
@@ -78,15 +79,28 @@ export default class ViewModel extends Model {
     dataOfElement(el, keys, value) {
         var attrs = keys.split('.');
         var model;
+        var name = attrs[0];
 
-        if (el.snData && attrs[0] in el.snData) {
+        if (el.snData && name in el.snData) {
             model = el.snData[attrs.shift()];
         } else {
             model = this;
         }
 
         if (arguments.length == 3) {
-            model.set(attrs, value);
+            switch (name) {
+                case 'srcElement':
+                    objectUtils.value(el, attrs.slice(1, -1))[attrs.pop()] = value;
+                    break;
+                case 'document':
+                    objectUtils.value(document, attrs.slice(1, -1))[attrs.pop()] = value;
+                    break;
+                case 'window':
+                    objectUtils.value(window, attrs.slice(1, -1))[attrs.pop()] = value;
+                    break;
+                default:
+                    model.set(attrs, value);
+            }
             return this;
         }
 
@@ -145,10 +159,14 @@ function checkOwnNode(viewModel, node) {
         if (!node.length)
             throw new Error('is not own node');
     } else {
+        var isOwnNode = false;
         viewModel.$el.each(function () {
-            if (!$.contains(this, node))
-                throw new Error('is not own node');
+            if ($.contains(this, node)) {
+                isOwnNode = true;
+                return false;
+            }
         });
+        if (!isOwnNode) throw new Error('is not own node');
     }
     return node;
 }
