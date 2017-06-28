@@ -104,7 +104,6 @@ function parseExpression(expression, variables) {
     })
 }
 
-
 function compileToString(str) {
     return str ? '\'' + str.replace(/\\/g, '\\\\').replace(/'/g, '\\\'') + '\'' : str;
 }
