@@ -84,13 +84,15 @@ export default function compileExpression(expression, withBraces) {
 }
 
 function parseExpression(expression, variables) {
-    return expression.replace(RE_EXPRESSION, function (match, vars, fn, name, lastIsFn) {
+    return expression.replace(RE_EXPRESSION, function (match, vars, fn, name, lastIsFn, index) {
         if (vars) {
             var mVar;
             while ((mVar = RE_VARS.exec(vars))) {
                 variables.push(mVar[1]);
             }
             return vars + ',';
+        } else if (expression[index - 1] == '.') {
+            return match;
         } else if (fn) {
             return (KEYWORDS[fn] ? fn : '$data.' + fn) + '(';
         } else if (name) {
@@ -101,6 +103,7 @@ function parseExpression(expression, variables) {
         return match;
     })
 }
+
 
 function compileToString(str) {
     return str ? '\'' + str.replace(/\\/g, '\\\\').replace(/'/g, '\\\'') + '\'' : str;

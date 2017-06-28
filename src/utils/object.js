@@ -87,6 +87,7 @@ export function value(data, names) {
         names = names.split('.');
 
     for (var i = 0, len = names.length; i < len; i++) {
+        if (data == null || data == undefined) return null;
         data = data[names[i]];
     }
 
