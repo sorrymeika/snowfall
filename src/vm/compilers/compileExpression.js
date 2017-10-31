@@ -3,6 +3,7 @@ import { testRegExp, codeRegExp } from '../utils/regex'
 const KEYWORDS = {
     'new': true,
     'this': true,
+    'function': true,
     'return': true,
     'instanceof': true,
     'typeof': true,
@@ -22,7 +23,7 @@ const KEYWORDS = {
 };
 
 var RE_MATCH_EXPRESSION = codeRegExp("{...}", 'g');
-var RE_EXPRESSION = /'(?:(?:\\{2})+|\\'|[^'])*'|"(?:(?:\\{2})+|\\"|[^"])*\"|\bvar\s+('(?:(?:\\{2})+|\\'|[^'])*'|[^;]+);|(?:\{|,)\s*[\w$]+\s*:\s*|([\w$]+)\(|function\s*\(.*?\)|([\w$]+(?:\.[\w$]+|\[[\w$\']+\])*)(\()?/g;
+var RE_EXPRESSION = /'(?:(?:\\{2})+|\\'|[^'])*'|"(?:(?:\\{2})+|\\"|[^"])*\"|function\s*\((.*?)\)|\bvar\s+('(?:(?:\\{2})+|\\'|[^'])*'|[^;]+);|(?:\{|,)\s*[\w$]+\s*:\s*|([\w$]+)\(|([\w$]+(?:\.[\w$]+|\[[\w$\']+\])*)(\()?/g;
 var RE_VARS = /([\w$]+)\s*(?:=(?:'(?:\\'|[^'])*'|[^;,]+))?/g;
 var RE_VALUE = /^(-?\d+(\.\d+)?|true|false|undefined|null|'(?:\\'|[^'])*')$/;
 
@@ -84,8 +85,13 @@ export default function compileExpression(expression, withBraces) {
 }
 
 function parseExpression(expression, variables) {
-    return expression.replace(RE_EXPRESSION, function (match, vars, fn, name, lastIsFn, index) {
-        if (vars) {
+    var fnParamsCache = {};
+    return expression.replace(RE_EXPRESSION, function (match, fnParams, vars, fn, name, lastIsFn, index) {
+        if (fnParams) {
+            fnParams.split(',').forEach(function (param) {
+                fnParamsCache[param.trim()] = true;
+            })
+        } else if (vars) {
             var mVar;
             while ((mVar = RE_VARS.exec(vars))) {
                 variables.push(mVar[1]);
@@ -97,8 +103,8 @@ function parseExpression(expression, variables) {
             return (KEYWORDS[fn] ? fn : '$data.' + fn) + '(';
         } else if (name) {
             return lastIsFn
-                ? valueExpression(name.substr(0, lastIsFn = name.lastIndexOf('.')), variables) + name.substr(lastIsFn) + "("
-                : valueExpression(name, variables);
+                ? valueExpression(name.substr(0, lastIsFn = name.lastIndexOf('.')), variables, fnParamsCache) + name.substr(lastIsFn) + "("
+                : valueExpression(name, variables, fnParamsCache);
         }
         return match;
     })
@@ -108,7 +114,7 @@ function compileToString(str) {
     return str ? '\'' + str.replace(/\\/g, '\\\\').replace(/'/g, '\\\'') + '\'' : str;
 }
 
-function valueExpression(str, variables) {
+function valueExpression(str, variables, fnParams) {
     if (RE_VALUE.test(str)) return str;
 
     var arr = str.split('.');
@@ -116,7 +122,7 @@ function valueExpression(str, variables) {
     var code = '';
     var gb = '$data';
 
-    if (!alias || KEYWORDS[alias] || (variables.length && variables.indexOf(alias) !== -1)) {
+    if (!alias || KEYWORDS[alias] || (fnParams && fnParams[alias]) || (variables.length && variables.indexOf(alias) !== -1)) {
         return str;
     } else {
         switch (alias) {

@@ -125,11 +125,10 @@ export default class ViewModel extends Model {
 
         console.time('render-' + this.cid);
         do {
+            this._nextTick = null;
             this.trigger(new Event(DATACHANGED_EVENT, {
                 target: this
             }));
-
-            this._nextTick = null;
 
             this.$el && eachElement(this.$el, (el) => {
                 if ((el.snViewModel && el.snViewModel != this) || this._nextTick) return false;
@@ -161,7 +160,7 @@ function checkOwnNode(viewModel, node) {
     } else {
         var isOwnNode = false;
         viewModel.$el.each(function () {
-            if ($.contains(this, node)) {
+            if ($.contains(this.snIfSource || this, node)) {
                 isOwnNode = true;
                 return false;
             }
