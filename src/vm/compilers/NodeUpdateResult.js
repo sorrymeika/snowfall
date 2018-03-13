@@ -1,11 +1,11 @@
 
 export default function NodeUpdateResult(result) {
-    Object.assign(this, result);
+    result && Object.assign(this, result);
 }
 
 NodeUpdateResult.prototype = {
     shouldUpdateAttributes: true,
     isBreak: false,
     isSkipChildNodes: false,
-    nextSibling: null
-}
+    nextSibling: undefined
+};

@@ -1,38 +1,31 @@
 
-import { DATACHANGED_EVENT, LINKSCHANGE_EVENT } from './consts';
+import Event from '../core/event';
 
-var Model;
-var Collection;
-var ViewModel;
+const factories = {};
 
-export function __init__(_Model, _Collection, _ViewModel) {
-    Model = _Model;
-    Collection = _Collection;
-    ViewModel = _ViewModel;
+export function initFactories(Model, Collection) {
+    factories.Model = Model;
+    factories.Collection = Collection;
+}
+
+export function createModelFactory() {
+    return factories.Model;
+}
+
+export function createCollectionFactory() {
+    return factories.Collection;
 }
 
 export function isModel(model) {
-    return model instanceof Model;
+    return model instanceof factories.Model;
 }
 
 export function isCollection(collection) {
-    return collection instanceof Collection;
+    return collection instanceof factories.Collection;
 }
 
 export function isModelOrCollection(model) {
     return isModel(model) || isCollection(model);
-}
-
-export function createModel(parent, attr, val) {
-    return new Model(parent, attr, val);
-}
-
-export function createCollection(parent, attr, val) {
-    return new Collection(parent, attr, val);
-}
-
-export function createViewModel(parent, attr, val) {
-    return new ViewModel(parent, attr, val);
 }
 
 export function updateViewNextTick(model) {
@@ -42,20 +35,27 @@ export function updateViewNextTick(model) {
     if (isCollection(model.parent)) {
         updateViewNextTick(model.parent);
     }
-
     var root = model.root;
-    root.one(DATACHANGED_EVENT, function () {
+    var link = model;
+    var links = [];
+
+    while (link) {
+        if (link._linkedParents && link._linkedParents.length && !link._linkChanged) {
+            link._linkChanged = true;
+            links.push(link);
+            root.trigger("linkchange:" + link.cid);
+        }
+        link = link.parent;
+    }
+
+    root.one('datachanged', function (e) {
+        links.forEach((ln) => {
+            ln._linkChanged = false;
+        });
         model.changed = false;
-        model.key && root.trigger(new Event(DATACHANGED_EVENT + ":" + model.key, {
+        model.key && root.trigger(new Event("datachanged:" + model.key, {
             target: model
         }));
-
-        while (model) {
-            if (model._linkedParents && model._linkedParents.length) {
-                root.trigger(LINKSCHANGE_EVENT + ":" + model.cid);
-            }
-            model = model.parent;
-        }
     }).renderNextTick();
 
     return model;
@@ -64,84 +64,39 @@ export function updateViewNextTick(model) {
 function updateReferenceByKey(parent, model, key, value) {
     if (isCollection(parent)) {
         var index = parent.indexOf(model);
-        if (index != -1 && parent.array[index] !== value) {
+        if (index != -1 && parent.$array[index] !== value) {
             if (!parent._isSetting) {
-                parent.array = parent.array.slice();
+                parent.$array = parent.$array.slice();
                 updateReference(parent);
             }
-            parent.array[index] = value;
+            parent.$array[index] = value;
         }
-    } else if (parent.attributes[key] !== value) {
+    } else if (parent.$attributes[key] !== value) {
         if (!parent._isSetting) {
-            parent.attributes = Object.assign({}, parent.attributes);
+            parent.$attributes = Object.assign({}, parent.$attributes);
             updateReference(parent);
         }
-        parent.attributes[key] = value;
+        parent.$attributes[key] = value;
     }
 }
 
 export function updateReference(model) {
-    var value = isCollection(model) ? model.array : model.attributes;
+    var value = isCollection(model) ? model.$array : model.$attributes;
 
     if (model._linkedParents) {
         model._linkedParents.forEach((item) => {
             updateReferenceByKey(item.model, model, item.childModelKey, value);
-        })
+        });
     }
     if (model.parent) {
         updateReferenceByKey(model.parent, model, model._key, value);
     }
 }
 
-export function linkModels(model, child, key) {
-    var root = model.root;
-    var childRoot = child.root;
-    var link = {
-        childModelKey: key,
-        childModel: child,
-        childRoot: childRoot,
-        model: model,
-        cb: function () {
-            root.renderNextTick();
-        }
-    };
-    var unlink = function () {
-        unlinkModels(model, child);
-        root.off('destroy', unlink);
-        childRoot.off('destroy', unlink);
-    }
-
-    root.on('destroy', unlink);
-    childRoot.on('destroy', unlink)
-        .on(LINKSCHANGE_EVENT + ":" + child.cid, link.cb);
-
-    (child._linkedParents || (child._linkedParents = [])).push(link);
-    (root._linkedModels || (root._linkedModels = [])).push(link);
-}
-
-export function unlinkModels(model, child) {
-    var root = model.root;
-    var link;
-    var linkedModels = root._linkedModels;
-    var linkedParents = child._linkedParents;
-
-    if (linkedModels && linkedParents) {
-        for (var i = linkedModels.length - 1; i >= 0; i--) {
-            link = linkedModels[i];
-            if (link.model == model && link.childModel == child) {
-                linkedModels.splice(i, 1);
-                linkedParents.splice(linkedParents.indexOf(link), 1);
-                child.root.off(LINKSCHANGE_EVENT + ":" + child.cid, link.cb);
-                break;
-            }
-        }
-    }
-}
-
 export function findModelByKey(model, key) {
     if (model.key == key) return model;
 
-    var modelMap = model._model;
+    var modelMap = model.$model;
 
     do {
         var hasChild = false;
@@ -169,8 +124,8 @@ export function findModelByKey(model, key) {
                 hasChild = true;
             }
 
-            if (hasChild && model._model) {
-                modelMap = model._model;
+            if (hasChild && model.$model) {
+                modelMap = model.$model;
                 break;
             }
         }
@@ -187,13 +142,34 @@ export function updateModelByKeys(model, renew, keys, val) {
     for (var i = 0, len = keys.length; i < len; i++) {
         key = keys[i];
 
-        if (!isModel(model._model[key])) {
-            tmp = model._model[key] = createModel(model, key, {});
-            model.attributes[key] = tmp.attributes;
+        if (!isModel(model.$model[key])) {
+            tmp = model.$model[key] = new factories.Model(model, key, {});
+            model.$attributes[key] = tmp.$attributes;
             model = tmp;
         } else {
-            model = model._model[key];
+            model = model.$model[key];
         }
     }
     return model.set(renew, lastKey, val);
+}
+
+export function removeAttribute(el, attributeName) {
+    var snAttributes = el.snAttributes;
+    if (snAttributes) {
+        for (var i = 0, n = snAttributes.length; i < n; i += 2) {
+            if (snAttributes[i] == attributeName) {
+                el.snValues[i / 2] = undefined;
+                break;
+            }
+        }
+    }
+    el.removeAttribute(attributeName);
+}
+
+export function findViewModel(el) {
+    for (; el; el = el.parentNode) {
+        if (el.snViewModel) {
+            return el.snViewModel;
+        }
+    }
 }

@@ -1,4 +1,5 @@
 import { isArray, isObject } from './is';
+import { equals, pick } from './object';
 
 var slice = Array.prototype.slice;
 
@@ -7,23 +8,24 @@ function _extend(target, source, deep) {
     for (var key in source)
         if (deep && (((isObj = isObject(source[key])) && !(isArr = false)) || (isArr = isArray(source[key])))) {
             if (isObj && !isObject(target[key]))
-                target[key] = {}
+                target[key] = {};
             if (isArr && !isArray(target[key]))
-                target[key] = []
-            _extend(target[key], source[key], deep)
+                target[key] = [];
+            _extend(target[key], source[key], deep);
         }
-        else if (source[key] !== undefined) target[key] = source[key]
+        else if (source[key] !== undefined) target[key] = source[key];
+    return target;
 }
 
 export function extend(target) {
-    var deep, args = slice.call(arguments, 1)
+    var deep, args = slice.call(arguments, 1);
     if (typeof target == 'boolean') {
-        deep = target
-        target = args.shift()
+        deep = target;
+        target = args.shift();
     }
 
-    args.forEach(function (arg) { _extend(target, arg, deep) })
-    return target
+    args.forEach(function (arg) { _extend(target, arg, deep); });
+    return target;
 }
 
 export function clone(data, deep) {
@@ -37,6 +39,55 @@ export function clone(data, deep) {
     }
 }
 
-export function cloneDeep(data) {
+export function deepClone(data) {
     return clone(data, true);
 }
+
+export function cloneObject(obj, keys) {
+    return new ObjectClone(obj, keys);
+}
+
+function ObjectClone(obj, keys) {
+    this.keys = keys;
+    this._result = true;
+    this.set(obj);
+}
+
+ObjectClone.prototype.set = function (obj) {
+    var object = {};
+    var keys = this.keys;
+    if (keys) {
+        var key;
+        for (var i = 0, length = keys.length; i < length; i++) {
+            key = keys[i];
+            if (key in obj) object[key] = deepClone(obj[key]);
+        }
+    } else {
+        _extend(object, obj, true);
+    }
+    this._clone = object;
+    return this;
+};
+
+ObjectClone.prototype.merge = function (obj) {
+    _extend(this._clone, obj, true);
+    return this;
+};
+
+ObjectClone.prototype.equals = function (obj) {
+    return (this._result = equals(this._clone, this.keys ? pick(obj, this.keys) : obj));
+};
+
+ObjectClone.prototype.equalsOrSet = function (obj) {
+    if (!this.equals(obj))
+        return this.set(obj).lastResult();
+    return true;
+};
+
+ObjectClone.prototype.lastResult = function () {
+    return this._result;
+};
+
+ObjectClone.prototype.object = function () {
+    return this._clone;
+};

@@ -1,7 +1,7 @@
-import { isArray } from './is'
-import { contains, equals } from './object'
+import { isArray } from './is';
+import { contains, equals } from './object';
 
-var RE_QUERY_ATTR = /([\w]+)(\^|\*|=|!|\$|~)?\=(\d+|null|undefined|true|false|'(?:\\'|[^'])*'|"(?:\\"|[^"])*"|(?:.*?(?=[,\|&])))([,\|&])?/g;
+var RE_QUERY_ATTR = /([\w]+)(\^|\*|=|!|\$|~)?=(\d+|null|undefined|true|false|'(?:\\'|[^'])*'|"(?:\\"|[^"])*"|(?:.*?(?=[,\|&])))([,\|&])?/g;
 
 /**
  * 将 query 编译成 查询方法
@@ -16,10 +16,8 @@ function compileQuery(query) {
     var groups = [group];
 
     query.replace(RE_QUERY_ATTR, function (match, attr, op, val, lg) {
-        //console.log(match, attr, op, val, lg);
-
         if (val.charAt(0) == '\'' && val.slice(-1) == '\'') {
-            val = val.slice(1, -1).replace(/\\\'/g, '\'');
+            val = val.slice(1, -1).replace(/\\\\'/g, '\'');
         } else {
             val = val === 'undefined' ? undefined : JSON.parse(val);
         }
@@ -40,7 +38,6 @@ function compileQuery(query) {
         return matchObject(groups, obj);
     } : function () { return true; };
 }
-
 
 /**
  * 判断某 Object 是否匹配`compileQuery`方法编译后的查询条件组
@@ -114,7 +111,7 @@ function matchObject(queryGroups, obj) {
  * 筛选数组
  * 
  * @param {String} query 查询字符串
- * @param {Array} array 被查询的数组
+ * @param {Array} arr 被查询的数组
  * 
  * @example
  * console.log(util.query("[attr!=undefined]", [{ attr: 1 }]))
@@ -125,21 +122,21 @@ function matchObject(queryGroups, obj) {
  *     attr: 'somevalue11'
  * });
  */
-export function query(query, array) {
-    if (!array) {
+export function query(query, arr) {
+    if (!arr) {
         return compileQuery(query);
 
     } else if (typeof query !== 'string') {
-        var tmp = array;
-        array = query;
+        var tmp = arr;
+        arr = query;
         query = tmp;
     }
 
     var match = compileQuery(query);
     var results = [];
 
-    for (var i = 0, n = array.length; i < n; i++) {
-        if (match(array[i])) results.push(array[i]);
+    for (var i = 0, n = arr.length; i < n; i++) {
+        if (match(arr[i])) results.push(arr[i]);
     }
 
     return results;
@@ -215,30 +212,29 @@ export function filter(arr, key, val) {
 /**
  * 查找第一个匹配的
  * 
- * @param {Array} array 
+ * @param {Array} arr 
  * @param {String|Function} key 
  * @param {any} [val]
  */
-export function first(array, key, val) {
-    var i = 0, len = array.length;
+export function find(arr, key, val) {
+    var i = 0, len = arr.length;
 
     if (typeof key === 'string' && arguments.length == 3) {
         for (; i < len; i++) {
-            if (array[i][key] == val) return array[i];
+            if (arr[i][key] == val) return arr[i];
         }
     } else if (typeof key === 'function') {
         for (; i < len; i++) {
-            if (key(array[i], i)) return array[i];
+            if (key(arr[i], i)) return arr[i];
         }
     } else {
         for (; i < len; i++) {
-            if (contains(array[i], key)) return array[i];
+            if (contains(arr[i], key)) return arr[i];
         }
     }
 
     return null;
 }
-
 
 /**
  * 移除数组中匹配的
@@ -299,7 +295,6 @@ export function exclude(arr, key, val) {
 
     return result;
 }
-
 
 export function indexOf(arr, key, val) {
     var length = arr.length;
@@ -367,7 +362,7 @@ export function groupBy(query, data) {
             operations.push({
                 operation: m[1],
                 key: m[2]
-            })
+            });
         } else {
             keys.push(item);
         }
@@ -382,7 +377,7 @@ export function groupBy(query, data) {
         }
 
         var i = 0;
-        var n = results.length
+        var n = results.length;
         for (; i < n; i++) {
             if (equals(results[i].key, key)) {
                 group = results[i];
@@ -395,7 +390,7 @@ export function groupBy(query, data) {
                 key: key,
                 count: 0,
                 group: []
-            }
+            };
             results.push(group);
         }
 
@@ -421,6 +416,7 @@ export function groupBy(query, data) {
                     }
                     group.avg[name] = (group.avg[name] * group.count + item[name]) / (group.count + 1);
                     break;
+                default:
             }
         }
 
@@ -446,4 +442,177 @@ export function sum(arr, key) {
     }
 
     return result;
+}
+
+/**
+ * 数组操作
+ * 
+ * @param {Array} arr 
+ */
+function ArrayQuery(arr) {
+    this.array = arr;
+    this.conditionGroups = [];
+    this.conditions = [];
+}
+
+var ARRAY_QUERY = 1;
+var ARRAY_MAP = 2;
+var ARRAY_CONCAT = 3;
+var ARRAY_FILTER = 4;
+var ARRAY_REMOVE = 5;
+var ARRAY_LOOP = 6;
+var ARRAY_EXCLUDE = 7;
+var ARRAY_REDUCE = 8;
+var ARRAY_FIRST = 9;
+
+ArrayQuery.prototype._ = function (query) {
+    this.conditions.push(ARRAY_QUERY, compileQuery(query));
+    return this;
+};
+
+ArrayQuery.prototype.map = function (key) {
+    this.conditions.push(ARRAY_MAP, typeof key === 'string'
+        ? function (item) {
+            return item[key];
+        }
+        : isArray(key)
+            ? function (item) {
+                var res = {};
+                for (var i = key.length - 1; i >= 0; i--) {
+                    var k = key[i];
+                    if (k in item) res[k] = item[k];
+                }
+                return res;
+            }
+            : key);
+
+    return this;
+};
+
+ArrayQuery.prototype.filter = function (key, val) {
+    var keyType = typeof key;
+
+    this.conditions.push(ARRAY_FILTER, keyType === 'string' && arguments.length == 2
+        ? function (item) {
+            return item[key] == val;
+        }
+        : keyType === 'function'
+            ? key
+            : function (item) {
+                return contains(item, key);
+            });
+    return this;
+};
+
+ArrayQuery.prototype.exclude = function (key, val) {
+    this.filter(key, val);
+    this.conditions[this.conditions.length - 2] = ARRAY_EXCLUDE;
+    return this;
+};
+
+ArrayQuery.prototype._renewConditions = function () {
+    if (this.conditions.length) {
+        this.conditionGroups.push({
+            type: ARRAY_LOOP,
+            conditions: this.conditions
+        });
+        this.conditions = [];
+    }
+};
+
+ArrayQuery.prototype.addConditionGroup = function (type, fn) {
+    this._renewConditions();
+    this.conditionGroups.push({
+        type: type,
+        conditions: fn
+    });
+    return this;
+};
+
+ArrayQuery.prototype.concat = function (arr) {
+    return this.addConditionGroup(ARRAY_CONCAT, function (result) {
+        return result.concat(arr);
+    });
+};
+
+ArrayQuery.prototype.reduce = function (fn, first) {
+    return this.addConditionGroup(ARRAY_REDUCE, function (result) {
+        return result.reduce(fn, first);
+    });
+};
+
+ArrayQuery.prototype.reduceRight = function (fn, first) {
+    return this.addConditionGroup(ARRAY_REDUCE, function (result) {
+        return result.reduceRight(fn, first);
+    });
+};
+
+ArrayQuery.prototype.remove = function (key, val) {
+    return this.addConditionGroup(ARRAY_REMOVE, function (result) {
+        return remove(result, key, val);
+    });
+};
+
+ArrayQuery.prototype.find = ArrayQuery.prototype.first = function (key, val) {
+    this.filter(key, val);
+    this.conditions[this.conditions.length - 2] = ARRAY_FIRST;
+    return this.toJSON();
+};
+
+ArrayQuery.prototype.toArray = ArrayQuery.prototype.toJSON = function () {
+    var result = this.array;
+    var conditionGroup;
+    var arr;
+    var isFindFirst = false;
+
+    this._renewConditions();
+
+    for (var i = 0; i < this.conditionGroups.length; i++) {
+        conditionGroup = this.conditionGroups[i];
+
+        if (conditionGroup.type == ARRAY_LOOP) {
+            arr = [];
+            outer: for (var j = 0; j < result.length; j++) {
+                var item = result[j];
+
+                for (var k = 0; k < conditionGroup.conditions.length;) {
+                    var type = conditionGroup.conditions[k++];
+                    var fn = conditionGroup.conditions[k++];
+
+                    switch (type) {
+                        case ARRAY_FIRST:
+                            if (fn(item, j, result)) return item;
+                            isFindFirst = true;
+                            break;
+                        case ARRAY_QUERY:
+                        case ARRAY_FILTER:
+                            if (!fn(item, j, result))
+                                continue outer;
+                            break;
+                        case ARRAY_EXCLUDE:
+                            if (fn(item, j, result))
+                                continue outer;
+                            break;
+                        case ARRAY_MAP:
+                            item = fn(item, j, result);
+                            break;
+                        default:
+                    }
+                }
+
+                arr.push(item);
+            }
+            if (isFindFirst) return null;
+
+            result = arr;
+        } else {
+            result = conditionGroup.conditions(result);
+        }
+    }
+
+    return result;
+};
+
+export function array(arr) {
+    return new ArrayQuery(arr);
 }

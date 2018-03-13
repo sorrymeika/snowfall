@@ -1,4 +1,41 @@
-import { isArray } from './is'
+import { isArray } from './is';
+
+var hasOwnProperty = Object.prototype.hasOwnProperty;
+var ArrayProto = Array.prototype;
+var slice = ArrayProto.slice;
+var concat = ArrayProto.concat;
+
+function classExtend(proto) {
+    var parent = this,
+        child = hasOwnProperty.call(proto, 'constructor') ? proto.constructor : function () {
+            return parent.apply(this, arguments);
+        };
+
+    var Surrogate = function () {
+        this.constructor = child;
+    };
+    Surrogate.prototype = parent.prototype;
+    child.prototype = new Surrogate();
+
+    for (var key in proto)
+        child.prototype[key] = proto[key];
+
+    for (var keyOfSuper in parent)
+        child[keyOfSuper] = parent[keyOfSuper];
+
+    child.prototype.__super__ = parent.prototype;
+
+    return child;
+}
+
+export function createClass(proto) {
+    var func = hasOwnProperty.call(proto, 'constructor') ? proto.constructor : function () {
+    };
+    func.prototype = proto;
+    func.prototype.constructor = func;
+    func.extend = classExtend;
+    return func;
+}
 
 /**
  * 判断两个 Object/Array 是否相等
@@ -31,15 +68,15 @@ export function equals(a, b, identical) {
             }
             break;
         case '[object Array]':
-            if (a.length != b.length) {
-                return true;
+            if (a.length !== b.length) {
+                return false;
             }
             for (i = a.length; i >= 0; i--) {
                 if (!equals(a[i], b[i], identical)) return false;
             }
             break;
         case '[object Date]':
-            return +a == +b;
+            return +a === +b;
         case '[object RegExp]':
             return ('' + a) === ('' + b);
         default:
@@ -49,8 +86,7 @@ export function equals(a, b, identical) {
     return true;
 }
 
-
-export function identifyWith(a, b) {
+export function same(a, b) {
     return equals(a, b, true);
 }
 
@@ -70,7 +106,7 @@ export function contains(parent, obj) {
             }
             break;
         case '[object Array]':
-            if (!isArray(obj)) return parent.indexOf(obj[i]) != -1;
+            if (!isArray(obj)) return parent.indexOf(obj) != -1;
 
             for (var i = obj.length; i >= 0; i--) {
                 if (parent.indexOf(obj[i]) == -1) return false;
@@ -92,4 +128,27 @@ export function value(data, names) {
     }
 
     return data;
+}
+
+
+/**
+ * pick Object
+ */
+export function pick(obj, iteratee) {
+    var result = {},
+        key;
+    if (obj == null) return result;
+    if (typeof iteratee === 'function') {
+        for (key in obj) {
+            var value = obj[key];
+            if (iteratee(value, key, obj)) result[key] = value;
+        }
+    } else {
+        var keys = concat.apply([], slice.call(arguments, 1));
+        for (var i = 0, length = keys.length; i < length; i++) {
+            key = keys[i];
+            if (key in obj) result[key] = obj[key];
+        }
+    }
+    return result;
 }

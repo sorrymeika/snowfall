@@ -30,3 +30,4 @@ var nextTick = BrowserMutationObserver
     : useSetTimeout();
 
 export default nextTick;
+export { nextTick };

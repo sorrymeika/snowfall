@@ -1,7 +1,7 @@
 
-import { isNo } from '../utils/is'
-import { TEXT_NODE, ELEMENT_NODE, nextNotTextNodeSibling } from '../utils/dom'
-import NodeUpdateResult from './NodeUpdateResult'
+import { TEXT_NODE, ELEMENT_NODE, nextNotTextNodeSibling } from '../../utils/dom';
+import NodeUpdateResult from './NodeUpdateResult';
+import { isYes } from '../../utils/is';
 
 const SN_IF = 'sn-if';
 const SN_ELSE_IF = 'sn-else-if';
@@ -19,7 +19,7 @@ function initElementIf(el, type) {
     }
     el.snReplacement = snIf;
     el.removeAttribute(type);
-    return { nextSibling: snIf.nextSibling }
+    return { nextSibling: snIf.nextSibling };
 }
 
 function setFunctionId(template, node, val) {
@@ -29,27 +29,29 @@ function setFunctionId(template, node, val) {
         false);
 }
 
-function insertBeforeIfElement(el) {
-    if (!el.parentNode) {
+function insertIfSourceElement(el) {
+    if (!el.parentNode && el.snIf.parentNode) {
         el.snIf.nextSibling
             ? el.snIf.parentNode.insertBefore(el, el.snIf.nextSibling)
             : el.snIf.parentNode.appendChild(el);
     }
 }
 
-function updateIfElement(viewModel, el) {
+function updateIfSourceElement(viewModel, el) {
     if (!el.parentNode) {
         if (el.snViewModel) {
             var nextEl = nextNotTextNodeSibling(el.snIf);
-            if (nextEl && nextEl.snViewModel == el.snViewModel) {
-                return { nextSibling: nextEl };
+            if (nextEl && nextEl.snViewModel === el.snViewModel) {
+                return new NodeUpdateResult({
+                    nextSibling: nextEl
+                });
             }
-            return;
+            return new NodeUpdateResult({ nextSibling: null });
         }
-        return {
+        return new NodeUpdateResult({
             isSkipChildNodes: true,
             nextSibling: el.snIf.nextSibling
-        };
+        });
     } else {
         var nextElement = el.nextSibling;
         var currentElement = el;
@@ -61,16 +63,16 @@ function updateIfElement(viewModel, el) {
             }
 
             if (currentElement.snViewModel != nextElement.snViewModel) {
-                return;
+                return new NodeUpdateResult({ nextSibling: nextElement.nextSibling });
             }
 
-            if ((!nextElement.snIf && !nextElement.snIfSource) || nextElement.snIfType == 'sn-if') {
+            if ((!nextElement.snIf && !nextElement.snIfSource) || nextElement.snIfType == SN_IF) {
                 break;
             }
 
             switch (nextElement.snIfType) {
-                case 'sn-else':
-                case 'sn-else-if':
+                case SN_ELSE:
+                case SN_ELSE_IF:
                     if (nextElement.snIf) {
                         nextElement.parentNode.removeChild(nextElement);
                         currentElement = nextElement.snIf;
@@ -84,7 +86,9 @@ function updateIfElement(viewModel, el) {
             nextElement = currentElement.nextSibling;
         }
 
-        return { nextSibling: currentElement.nextSibling };
+        return new NodeUpdateResult({
+            nextSibling: currentElement.nextSibling
+        });
     }
 }
 
@@ -122,22 +126,29 @@ export class IfCompiler {
             });
         } else if (node.snIf) {
             switch (node.snIfType) {
-                case "sn-else":
-                    insertBeforeIfElement(node);
+                case SN_ELSE:
+                    node.snIfStatus = true;
+                    insertIfSourceElement(node);
                     break;
-                case "sn-if":
-                case "sn-else-if":
-                    if (isNo(this.template.executeFunction(node.snIfFid, nodeData.data))) {
+                case SN_IF:
+                case SN_ELSE_IF:
+                    if ((node.snIfStatus = isYes(this.template.executeFunction(node.snIfFid, nodeData.data)))) {
+                        insertIfSourceElement(node);
+                    } else {
                         if (node.parentNode) {
                             node.parentNode.removeChild(node);
                         }
-                        return;
-                    } else {
-                        insertBeforeIfElement(node);
+                        return new NodeUpdateResult({
+                            isSkipChildNodes: true,
+                            isBreak: true,
+                            shouldUpdateAttributes: false,
+                            nextSibling: node.snIf.nextSibling
+                        });
                     }
                     break;
+                default:
             }
-            return new NodeUpdateResult(updateIfElement(this.viewModel, node));
+            return updateIfSourceElement(this.viewModel, node);
         }
     }
 }

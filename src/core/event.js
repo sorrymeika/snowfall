@@ -1,5 +1,6 @@
 var slice = [].slice;
 var separator = /\s+/;
+var eventId = 0;
 
 function returnFalse() {
     return false;
@@ -24,7 +25,9 @@ function parse(name) {
 
     return {
         e: parts[0],
-        ns: parts.slice(1).sort().join(' ')
+        ns: parts.slice(1)
+            .sort()
+            .join(' ')
     };
 }
 
@@ -44,32 +47,52 @@ function findHandlers(arr, name, callback, context) {
     });
 }
 
-export class Event {
-    constructor(type, props) {
-        if (!(this instanceof Event)) {
-            return new Event(type, props);
+function removeHandlers(arr, name, callback, context) {
+    var matcher,
+        handler,
+        obj,
+        result = [];
+
+    obj = parse(name);
+    obj.ns && (matcher = matcherFor(obj.ns));
+    for (var i = arr.length; i >= 0; i--) {
+        if ((handler = arr[i]) && !(
+            (!obj.e || handler.e === obj.e) &&
+            (!obj.ns || matcher.test(handler.ns)) &&
+            (!callback || handler.cb === callback ||
+                handler.cb._cb === callback) &&
+            (!context || handler.ctx === context))) {
+            result.push(handler);
         }
-
-        props && Object.assign(this, props);
-        this.type = type;
-
-        return this;
     }
-
-    isDefaultPrevented = returnFalse;
-    isPropagationStopped = returnFalse;
-
-    preventDefault() {
-        this.isDefaultPrevented = returnTrue;
-    }
-
-    stopPropagation() {
-        this.isPropagationStopped = returnTrue;
-    }
+    return result;
 }
 
-export class EventEmitter {
-    on(name, callback, context) {
+export function Event(type, props) {
+    props && Object.assign(this, props);
+    this.type = type;
+
+    return this;
+}
+
+Event.prototype = {
+
+    isDefaultPrevented: returnFalse,
+
+    isPropagationStopped: returnFalse,
+
+    preventDefault: function () {
+        this.isDefaultPrevented = returnTrue;
+    },
+
+    stopPropagation: function () {
+        this.isPropagationStopped = returnTrue;
+    }
+};
+
+var event = {
+
+    on: function (name, callback, context) {
         var me = this,
             set;
 
@@ -85,14 +108,14 @@ export class EventEmitter {
             handler.cb = callback;
             handler.ctx = context;
             handler.ctx2 = context || me;
-            handler.id = set.length;
+            handler.id = eventId++;
             set.push(handler);
         });
 
         return this;
-    }
+    },
 
-    onceTrue(name, callback, context) {
+    onceTrue: function (name, callback, context) {
         var me = this;
 
         if (!callback) {
@@ -102,6 +125,7 @@ export class EventEmitter {
         eachEvent(name, callback, function (name, callback) {
             var once = function () {
                 var res = callback.apply(context || me, arguments);
+
                 if (res === true)
                     me.off(name, once);
 
@@ -113,9 +137,9 @@ export class EventEmitter {
         });
 
         return this;
-    }
+    },
 
-    one(name, callback, context) {
+    one: function (name, callback, context) {
         var me = this;
 
         if (!callback) {
@@ -133,9 +157,9 @@ export class EventEmitter {
         });
 
         return this;
-    }
+    },
 
-    off(name, callback, context) {
+    off: function (name, callback, context) {
         var events = this._events;
 
         if (!events) {
@@ -147,17 +171,14 @@ export class EventEmitter {
             return this;
         }
 
-        eachEvent(name, callback, function (name, callback) {
-            findHandlers(events, name, callback, context)
-                .forEach(function (handler) {
-                    delete events[handler.id];
-                });
+        eachEvent(name, callback, (name, callback) => {
+            this._events = removeHandlers(events, name, callback, context);
         });
 
         return this;
-    }
+    },
 
-    trigger(evt) {
+    trigger: function (evt) {
         var i = -1,
             args,
             events,
@@ -176,16 +197,16 @@ export class EventEmitter {
         args.unshift(evt);
 
         events = findHandlers(this._events, evt.type);
-
         if (events) {
             len = events.length;
-
             while (++i < len) {
                 if ((stoped = evt.isPropagationStopped()) || false ===
                     (ev = events[i]).cb.apply(ev.ctx2, args)
                 ) {
-
-                    stoped || (evt.stopPropagation(), evt.preventDefault());
+                    if (!stoped) {
+                        evt.stopPropagation();
+                        evt.preventDefault();
+                    }
                     break;
                 }
             }
@@ -193,4 +214,16 @@ export class EventEmitter {
 
         return this;
     }
+};
+
+export function mixin(fn, ext) {
+    Object.assign(typeof fn == 'function' ? fn.prototype : fn, event, ext);
+    return fn;
 }
+
+export function EventEmitter() {
+}
+EventEmitter.prototype = event;
+
+export default Event;
+

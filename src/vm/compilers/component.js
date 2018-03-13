@@ -1,8 +1,21 @@
-import { TEXT_NODE, ELEMENT_NODE } from '../../utils/dom'
-import { camelCase } from '../utils/string'
+import { TEXT_NODE, ELEMENT_NODE } from '../../utils/dom';
+import { camelCase } from '../../utils/string';
+import ViewModel from '../ViewModel';
 
 const registedComponents = {};
 
+function extendViewModel(options) {
+    class Component extends ViewModel {
+    };
+    Object.assign(Component.prototype, options);
+    return Component;
+}
+
+export function registerComponent(componentName, component) {
+    registedComponents[componentName] = typeof component == 'function'
+        ? component
+        : extendViewModel(component);
+}
 
 export class ComponentCompiler {
     constructor(template) {
@@ -47,28 +60,19 @@ export class ComponentCompiler {
             nodeData.setRef(el.snComponentInstance);
         } else if (el.snComponent) {
             var children = [];
-            var node;
-            var snComponent = el.snComponent;
+            var Component = el.snComponent;
             var instance;
+            var node = el.firstChild;
 
-            for (var i = 0, j = el.childNodes.length - 1; i < j; i++) {
-                node = el.childNodes[i];
-
+            while (node) {
                 if (node.nodeType !== TEXT_NODE || !/^\s*$/.test(node.textContent)) {
                     children.push(node);
                     node.snViewModel = viewModel;
                     viewModel.$el.push(node);
                 }
+                node = node.nextSibling;
             }
-            if (typeof snComponent === 'function') {
-                instance = new snComponent(props, children);
-            } else {
-                instance = snComponent;
-                if (typeof instance.children === 'function') {
-                    instance.children(children);
-                }
-                instance.set(props);
-            }
+            instance = new Component(props, children);
             instance.$el.appendTo(el);
 
             el.snComponentInstance = instance;

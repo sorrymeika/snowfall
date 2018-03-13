@@ -1,13 +1,19 @@
-import { isArray, isNo } from '../utils/is'
-import { $, TEXT_NODE, ELEMENT_NODE, eachElement, insertElementAfter, fade } from '../utils/dom'
+import { isArray, isNo } from '../../utils/is';
+import { $, TEXT_NODE, ELEMENT_NODE, eachElement, insertElementAfter, fade } from '../../utils/dom';
 
-import compilers from './compilers'
-import FunctionCompiler from './FunctionCompiler'
+import { getCompilers } from './compilers';
+import FunctionCompiler from './FunctionCompiler';
+
+function isExpression(val) {
+    return val.indexOf("{") !== -1 && val.lastIndexOf("}") !== -1;
+}
 
 export class TemplateCompiler {
     constructor(viewModel) {
         this.viewModel = viewModel;
         this.functionCompiler = new FunctionCompiler(viewModel);
+
+        var compilers = getCompilers();
         this.compiler = compilers.createCompiler(this);
         this.nodeCompiler = compilers.createNodeCompiler(this);
         this.attributesCompiler = compilers.createAttributeCompiler(this);
@@ -18,10 +24,10 @@ export class TemplateCompiler {
 
         eachElement($element, (node) => {
             if (node.snViewModel && node.snViewModel != viewModel) return false;
-            return this.compileNode(viewModel, node);
+            return this.compileNode(node);
         });
 
-        this.compiler.reduce(viewModel, $element);
+        this.compiler.reduce($element);
         this.functionCompiler.compile();
 
         return $element;
@@ -63,15 +69,17 @@ export class TemplateCompiler {
                         case 'sn-display':
                         case 'sn-style':
                         case 'sn-css':
-                            attributesCompiler.compile(el, attr, val, val.indexOf("{") != -1 && val.lastIndexOf("}") != -1);
+                        case 'sn-image':
+                            attributesCompiler.compile(el, attr, val, isExpression(val));
                             break;
                         default:
                             attributesCompiler.reduce(el, attr, val);
                             break;
                     }
-                } else if (attr == "ref" && !el.snComponent) {
-                    this.viewModel.refs[val] = el;
                 } else {
+                    if (attr === 'ref' && !isExpression(val)) {
+                        val = "{'" + val + "'}";
+                    }
                     attributesCompiler.compile(el, attr, val);
                 }
             }
@@ -140,24 +148,32 @@ export class TemplateCompiler {
                 case 'disabled':
                     (el[attrName] = !!val) ? el.setAttribute(attrName, attrName) : el.removeAttribute(attrName);
                     break;
+                case 'sn-image':
                 case 'src':
-                    el.src = val;
+                    if (val) {
+                        el.src = val;
+                    } else {
+                        el.removeAttribute('src');
+                    }
                     break;
                 case 'sn-src':
                     if (val) {
                         if (el.src) {
                             el.src = val;
                         } else {
-                            $(el).one('load error', function (e) {
-                                $(this).animate({
-                                    opacity: 1
-                                }, 200);
-                                if (e.type === 'error') el.removeAttribute('src');
-                            }).css({
-                                opacity: 0
-                            }).attr({
-                                src: val
-                            });
+                            $(el)
+                                .one('load error', function (e) {
+                                    $(this).animate({
+                                        opacity: 1
+                                    }, 200);
+                                    if (e.type === 'error') el.removeAttribute('src');
+                                })
+                                .css({
+                                    opacity: .3
+                                })
+                                .attr({
+                                    src: val
+                                });
                         }
                     } else {
                         el.removeAttribute('src');
@@ -168,7 +184,7 @@ export class TemplateCompiler {
                     break;
             }
 
-            attributesCompiler.update(el, attrName, val)
+            attributesCompiler.update(el, attrName, val);
         }
     }
 
@@ -180,8 +196,8 @@ export class TemplateCompiler {
         return this.functionCompiler.executeFunction(fid, data);
     }
 
-    getFunctionArg(fid, data) {
-        return this.functionCompiler.getFunctionArg(fid, data);
+    getFunctionArg(node, data) {
+        return this.functionCompiler.getFunctionArg(node, data);
     }
 }
 
@@ -192,18 +208,19 @@ function updateTextNode(el, val) {
         var newTails = [];
 
         val.forEach(function (item) {
-            if (node.nextSibling !== item) {
+            var nextSibling = node.nextSibling;
+            if (nextSibling !== item) {
                 if (
                     item.nodeType || (
-                        (!node.nextSibling ||
-                            node.nextSibling.nodeType !== TEXT_NODE ||
-                            node.nextSibling.textContent !== "" + item) &&
+                        (!nextSibling ||
+                            nextSibling.nodeType !== TEXT_NODE ||
+                            nextSibling.textContent !== "" + item) &&
                         (item = document.createTextNode(item))
                     )
                 ) {
                     insertElementAfter(node, item);
                 } else {
-                    item = node.nextSibling;
+                    item = nextSibling;
                 }
             }
             if (removableTails) {

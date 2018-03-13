@@ -1,4 +1,4 @@
-import { ELEMENT_NODE } from '../utils/dom';
+import { TEXT_NODE } from "../../utils/dom";
 
 export default function createNodeCompilerFactory(compilers) {
 
@@ -21,20 +21,23 @@ export default function createNodeCompilerFactory(compilers) {
         get data() {
             return this._data
                 ? this._data
-                : this.template.getFunctionArg(this.node, this.node.snData)
+                : this.template.getFunctionArg(this.node, this.node.snData);
         }
     }
 
     class NodeCompiler {
         constructor(template) {
             this.template = template;
-            this.compilers = compilers.map((Compiler) => new Compiler(template))
+            this.compilers = compilers.map((Compiler) => new Compiler(template));
         }
 
         reduce(el) {
             var res;
+            var compilers = this.compilers;
+            var nodeType = el.nodeType;
             for (var i = 0; i < compilers.length; i++) {
-                if ((res = compilers[i].compile(el))) {
+                res = compilers[i].compile(el, nodeType);
+                if (res) {
                     return res;
                 }
             }
@@ -43,14 +46,16 @@ export default function createNodeCompilerFactory(compilers) {
         update(node) {
             var nodeData = new NodeData(this.template, node);
             var res;
+            var compilers = this.compilers;
+
             for (var i = 0; i < compilers.length; i++) {
                 res = compilers[i].update(nodeData);
-                if (res === true || (res && res.isBreak)) {
+                if (res && res.isBreak) {
                     break;
                 }
             }
 
-            if (node.nodeType == ELEMENT_NODE && (!res || res.shouldUpdateAttributes)) {
+            if ((!res || res.shouldUpdateAttributes) || nodeData.nodeType === TEXT_NODE) {
                 this.template.updateAttributes(nodeData);
             }
             return res;
@@ -59,5 +64,5 @@ export default function createNodeCompilerFactory(compilers) {
 
     return function createNodeCompiler(templateCompiler) {
         return new NodeCompiler(templateCompiler);
-    }
+    };
 }

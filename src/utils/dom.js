@@ -1,5 +1,6 @@
-import { isArray, isNo } from './is'
-import style from './style'
+import '../../libs/zepto';
+import { isArray, isNo } from './is';
+import style from './style';
 
 export const $ = window.$;
 
@@ -82,18 +83,16 @@ export function eachElement(el, fn) {
 
     while (el) {
         var res = fn(el);
-        var nextSibling;
-
-        if (res && res.nextSibling) {
-            nextSibling = res.nextSibling;
-            res = res.isSkipChildNodes === true ? false : true;
-        } else if (!firstLoop) {
-            nextSibling = el.nextSibling;
-        }
+        var isSkipChildNodes = res === false || (res && res.isSkipChildNodes);
+        var nextSibling = res && res.nextSibling
+            ? res.nextSibling
+            : firstLoop || (res && res.nextSibling) === null
+                ? null
+                : el.nextSibling;
 
         if (firstLoop) firstLoop = false;
 
-        if (res !== false && el.firstChild) {
+        if (!isSkipChildNodes && el.firstChild) {
             if (nextSibling) {
                 stack.push(nextSibling);
             }
@@ -116,16 +115,16 @@ export function nextNotTextNodeSibling(el) {
     return null;
 }
 
-style('sn-display', '.sn-display { opacity: 1; -webkit-transition: opacity 300ms ease-out 0ms; transition: opacity 300ms ease-out 0ms; }\
-.sn-display-show { opacity: 1; }\
-.sn-display-hide { opacity: 0; }');
+style('sn-display', `.sn-display { opacity: 1; -webkit-transition: opacity 300ms ease-out 0ms; transition: opacity 300ms ease-out 0ms; }
+.sn-display-show { opacity: 1; }
+.sn-display-hide { opacity: 0; }`);
 
 export function fade(el, val) {
     var $el = $(el);
     var isInitDisplay = true;
     if (!$el.hasClass('sn-display')) {
         isInitDisplay = false;
-        $el.addClass('sn-display')[0].clientHeight;
+        void $el.addClass('sn-display')[0].clientHeight;
     }
     var display = isNo(val) ? 'none' : val == 'block' || val == 'inline' || val == 'inline-block' ? val : '';
     if (display == 'none') {
@@ -133,7 +132,7 @@ export function fade(el, val) {
             var onHide = function () {
                 if ($el.hasClass('sn-display-hide'))
                     $el.hide();
-            }
+            };
             $el.addClass('sn-display-hide')
                 .one(TRANSITION_END, onHide);
             setTimeout(onHide, 300);
@@ -142,7 +141,7 @@ export function fade(el, val) {
         $el.css({
             display: display
         });
-        el.clientHeight;
+        void el.clientHeight;
         $el.removeClass('sn-display-hide');
     }
 }

@@ -1,8 +1,9 @@
-import Model from './model';
-import Collection from './collection';
-import ViewModel from './viewModel';
-import { __init__ } from './adapter';
+import Model from './Model';
+import Collection from './Collection';
+import ViewModel from './ViewModel';
+import { initFactories, removeAttribute, findViewModel } from './adapter';
 
-__init__(Model, Collection, ViewModel);
+initFactories(Model, Collection);
 
-export { ViewModel, Model, Collection }
+export { ViewModel, Model, Collection, removeAttribute, findViewModel };
+export { registerComponent as component } from './compilers/component';

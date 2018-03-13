@@ -1,5 +1,5 @@
-import { $, TRANSITION_END } from '../../utils/dom'
-import { RE_STRING, codeRegExp } from '../../utils/regex'
+import { $, TRANSITION_END } from '../../utils/dom';
+import { RE_STRING, codeRegExp } from '../../utils/regex';
 
 export const EVENTS = {
     tap: 'tap',
@@ -34,14 +34,14 @@ function getEventProxy(viewModel) {
             return;
         }
         var target = e.currentTarget;
-        var eventCode = target.getAttribute('sn-' + viewModel.cid + e.type);
+        var eventCode = target.getAttribute('sn' + viewModel.cid + e.type);
 
         if (eventCode == 'false') {
             return false;
         } else if (+eventCode) {
-            var args = viewModel.compiler.getFunctionArg(viewModel, target, target.snData);
+            var args = viewModel.compiler.getFunctionArg(target, target.snData);
             args.e = e;
-            return viewModel.compiler.executeFunction(viewModel, eventCode, args);
+            return viewModel.compiler.executeFunction(eventCode, args);
         }
     });
 }
@@ -56,7 +56,7 @@ function isBubbleEvent(eventName) {
     }
 }
 
-function bindEvents(viewModel, $element) {
+export function bindEvents(viewModel, $element) {
     $element.on('input change blur', '[' + viewModel.eventId + ']', function (e) {
         var target = e.currentTarget;
 
@@ -77,8 +77,10 @@ function bindEvents(viewModel, $element) {
                                 return;
                         }
                         break;
+                    default:
                 }
                 break;
+            default:
         }
 
         viewModel.dataOfElement(target, target.getAttribute(viewModel.eventId), target.value);
@@ -91,14 +93,16 @@ function bindEvents(viewModel, $element) {
         eventName = EVENTS[key];
 
         if (isBubbleEvent(eventName)) {
-            eventAttr = '[sn-' + viewModel.cid + eventName + ']';
-            $element.on(eventName, eventAttr, eventFn)
-                .filter(eventAttr).on(eventName, eventFn);
+            eventAttr = '[sn' + viewModel.cid + eventName + ']';
+            $element
+                .on(eventName, eventAttr, eventFn)
+                .filter(eventAttr)
+                .on(eventName, eventFn);
         }
     }
 }
 
-function unbindEvents(viewModel, $element) {
+export function unbindEvents(viewModel, $element) {
     if ($element) {
         $element.off('input change blur', '[' + viewModel.eventId + ']')
             .each(function () {
@@ -111,7 +115,7 @@ function unbindEvents(viewModel, $element) {
 
         for (var key in EVENTS) {
             eventName = EVENTS[key];
-            eventAttr = '[sn-' + viewModel.cid + eventName + ']';
+            eventAttr = '[sn' + viewModel.cid + eventName + ']';
 
             if (isBubbleEvent(eventName)) {
                 $element.off(eventName, eventAttr, eventFn);
@@ -121,7 +125,7 @@ function unbindEvents(viewModel, $element) {
             }
 
             $element.filter(eventAttr)
-                .off(eventName, eventFn)
+                .off(eventName, eventFn);
         }
     }
 }
@@ -134,7 +138,7 @@ function removeEvents(viewModel) {
 function compileEvent(eventCompiler, el, evt, val) {
     var template = eventCompiler.template;
 
-    var attr = "sn-" + template.viewModel.cid + evt;
+    var attr = "sn" + template.viewModel.cid + evt;
     if (val == 'false') {
         el.setAttribute(attr, val);
     } else {
@@ -154,6 +158,7 @@ function compileEvent(eventCompiler, el, evt, val) {
             (el.snEvents || (el.snEvents = [])).push(evt);
             $(el).on(evt, getEventProxy(template.viewModel));
             break;
+        default:
     }
 }
 
@@ -163,7 +168,7 @@ export class EventCompiler {
     }
 
     compile($element) {
-        bindEvents(this.viewModel, $element)
+        bindEvents(this.viewModel, $element);
     }
 }
 
@@ -174,7 +179,7 @@ export class EventAttributeCompiler {
     constructor(template) {
         this.template = template;
         this.eventId = template.viewModel.eventId;
-        template.viewModel.on("destroy", removeEvents.bind(null, template.viewModel))
+        template.viewModel.on("destroy", () => removeEvents(template.viewModel));
     }
 
     compile(el, attr, val) {
@@ -195,7 +200,7 @@ export class EventAttributeCompiler {
     update(el, attr, val) {
         if (attr == 'sn-src' && val) {
             var viewModel = this.template.viewModel;
-            if (el.getAttribute('sn-' + viewModel.cid + 'load') || el.getAttribute('sn-' + viewModel.cid + 'error')) {
+            if (el.getAttribute('sn' + viewModel.cid + 'load') || el.getAttribute('sn' + viewModel.cid + 'error')) {
                 $(el).one('load error', getEventProxy(viewModel));
             }
         }

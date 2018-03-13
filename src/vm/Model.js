@@ -1,8 +1,8 @@
-import { isArray, isPlainObject, isThenable } from '../utils/is'
-import { extend, cloneDeep } from '../utils/clone'
-import nextTick from '../utils/nextTick'
-import { identify } from '../utils/guid'
-import { EventEmitter } from '../core/events'
+import { isBoolean, isArray, isPlainObject, isThenable } from '../utils/is';
+import { extend, deepClone } from '../utils/clone';
+import { identify } from '../utils/guid';
+
+import { Event } from '../core/event';
 import {
     isModel,
     isCollection,
@@ -10,21 +10,27 @@ import {
     updateReference,
     updateModelByKeys,
     updateViewNextTick,
-    linkModels,
-    unlinkModels,
-    createCollection
-} from './adapter'
+    createCollectionFactory
+} from './adapter';
+import { linkModels, unlinkModels } from './linker';
 
-import { DATACHANGED_EVENT } from './consts';
+import { mixinDataSet } from './DataSet';
 
+const toString = Object.prototype.toString;
 const RE_QUERY = /(?:^|\.)([_a-zA-Z0-9]+)(\[(?:'(?:\\'|[^'])*'|"(?:\\"|[^"])*"|[^\]])+\](?:\[[\+\-]?\d*\])?)?/g;
 
-export default class Model {
-    constructor(parent, key, attributes) {
+function createArray(model, name, array) {
+    const ArrayFactory = model.constructor.createArrayFactory(name, array);
+    return new ArrayFactory(model, name, array);
+}
 
-        if (arguments.length == 1) {
+export default class Model {
+    static createArrayFactory = createCollectionFactory;
+
+    constructor(parent, key, attributes) {
+        if (arguments.length <= 1) {
             this.root = this;
-            attributes = parent;
+            attributes = parent === undefined ? extend({}, this.attributes, this.constructor.defaultAttributes) : parent;
         } else {
             if (isModel(parent)) {
                 this.key = parent.key ? parent.key + '.' + key : key;
@@ -41,15 +47,21 @@ export default class Model {
 
         this.cid = identify();
 
-        this.type = typeof attributes;
-        this.attributes = this.type == 'object' ? extend({}, this.attributes, attributes) : undefined;
+        this.$attributes = null;
+        this.$model = {};
 
-        this._model = {};
         this.render = this.render.bind(this);
-
         this.changed = false;
 
         this.set(attributes);
+    }
+
+    get attributes() {
+        return this.$attributes;
+    }
+
+    set attributes(val) {
+        this.set(true, val);
     }
 
     /**
@@ -86,7 +98,7 @@ export default class Model {
             query = m[2];
 
             if (isModel(result)) {
-                result = attr in result._model ? result._model[attr] : result.attributes[attr];
+                result = result.$model[attr] || result.$attributes[attr];
 
                 if (query && isCollection(result)) {
                     return result._(query + search.substr(m.index + m[0].length), def);
@@ -95,13 +107,14 @@ export default class Model {
             else if (!result)
                 return def === undefined ? null : def;
             else
-                result = result[attr]
+                result = result[attr];
         }
         return !result && def !== undefined ? def : result;
     }
 
     get(key) {
-        if (typeof key === 'undefined') return this.attributes;
+        if (!this.$attributes) return undefined;
+        if (typeof key === 'undefined') return this.$attributes;
 
         if (typeof key == 'string' && key.indexOf('.') != -1) {
             key = key.split('.');
@@ -109,27 +122,19 @@ export default class Model {
 
         var data;
         if (isArray(key)) {
-            data = this.attributes;
+            data = this.$attributes;
 
             for (var i = key[0] == 'this' ? 1 : 0, len = key.length; i < len; i++) {
                 if (!(data = data[key[i]]))
                     return null;
             }
         } else if (key == 'this') {
-            return this.attributes;
+            return this.$attributes;
         } else {
-            data = this.attributes[key];
+            data = this.$attributes[key];
         }
 
         return data;
-    }
-
-    getJSON(key) {
-        return cloneDeep(this.get(key));
-    }
-
-    toJSON() {
-        return extend(true, {}, this.attributes);
     }
 
     /**
@@ -144,43 +149,42 @@ export default class Model {
      * @param {any} [val] 属性值
      */
     set(renew, key, val) {
-        var self = this,
-            model,
+        var model,
             attrs,
             keys,
             renewChild = false,
-            root = this.root;
+            root = this.root,
+            argsLength = arguments.length,
+            keyIsVal;
 
-        if (typeof renew != "boolean") {
+        if (!isBoolean(renew) || argsLength === 1) {
             val = key;
             key = renew;
             renew = false;
+            keyIsVal = argsLength === 1;
+        } else {
+            keyIsVal = argsLength === 2;
         }
 
-        var isArrayKey = isArray(key);
+        var keyType = toString.call(key);
+        var keyIsObject = keyType === '[object Object]';
 
-        if (key === null) {
-            this.restore();
-            this.attributes = null;
-            updateReference(this);
-            return this;
-        } else if (!isArrayKey && typeof key == 'object') {
-            attrs = key;
-        } else if (typeof val === 'undefined') {
-            val = key;
-
-            if (this.attributes !== val) {
-                this.attributes = val;
+        if (keyIsVal && !keyIsObject) {
+            if (this._isChange = (this.$attributes !== key)) {
+                this.$model = {};
+                this.$attributes = key;
                 updateReference(updateViewNextTick(this));
             }
             return this;
+        } else if (keyIsObject) {
+            attrs = key;
         } else {
-            keys = isArrayKey ? key : key.split('.');
+            keys = keyType === '[object Array]' ? key : key.split('.');
 
             if (keys.length > 1) {
                 model = updateModelByKeys(this, renew, keys, val);
 
-                return model._hasChange
+                return (this._isChange = model._isChange)
                     ? updateViewNextTick(this)
                     : this;
             } else {
@@ -189,18 +193,18 @@ export default class Model {
                 (attrs = {})[key] = val;
             }
         }
-        var hasChange = false;
-        var oldAttributes = this.attributes;
+        var isChange = false;
+        var oldAttributes = this.$attributes;
         var attributes;
 
-        if (this.attributes === null || !isPlainObject(this.attributes)) {
+        if (this.$attributes === null || !isPlainObject(this.$attributes)) {
             attributes = {};
-            hasChange = true;
+            isChange = true;
         } else {
-            attributes = Object.assign({}, this.attributes)
+            attributes = Object.assign({}, this.$attributes);
         }
 
-        this.attributes = attributes;
+        this.$attributes = attributes;
         this._isSetting = true;
 
         if (renew) {
@@ -214,36 +218,27 @@ export default class Model {
         var changes = [];
         var origin;
         var value;
-        var isInModelMap;
-        var modelMap = this._model;
+        var modelMap = this.$model;
 
         for (var attr in attrs) {
-            isInModelMap = attr in modelMap;
-            origin = isInModelMap ? modelMap[attr] : attributes[attr];
+            origin = modelMap[attr] || attributes[attr];
             value = attrs[attr];
-
             if (origin !== value) {
                 if (isModelOrCollection(value)) {
                     modelMap[attr] = value;
-                    attributes[attr] = isCollection(value) ? value.array : value.attributes;
+                    attributes[attr] = isCollection(value) ? value.$array : value.$attributes;
 
                     if (isModelOrCollection(origin)) {
                         unlinkModels(this, origin);
                     }
-
                     linkModels(this, value, this.key ? this.key + '.' + attr : attr);
 
-                    hasChange = true;
+                    isChange = true;
                 } else if (isModel(origin)) {
-                    if (value === null || value === undefined) {
-                        origin.restore();
-                        origin.attributes = null;
-                    } else {
-                        origin.set(renewChild, value);
-                    }
-                    attributes[attr] = origin.attributes;
+                    origin.set(renew || renewChild, value);
+                    attributes[attr] = origin.$attributes;
 
-                    if (origin._hasChange) hasChange = true;
+                    if (origin._isChange) isChange = true;
                 } else if (isCollection(origin)) {
                     if (!isArray(value)) {
                         if (value == null) {
@@ -254,33 +249,32 @@ export default class Model {
                     }
 
                     origin.set(value);
-                    attributes[attr] = origin.array;
+                    attributes[attr] = origin.$array;
 
-                    if (origin._hasChange) hasChange = true;
+                    if (origin._isChange) isChange = true;
                 } else if (isThenable(value)) {
-                    value.then(function (res) {
-                        self.set(attr, res);
-                    });
+                    value.then(((attr, res) => {
+                        this.set(renew, attr, res);
+                    }).bind(this, attr));
                 } else if (isPlainObject(value)) {
                     value = new Model(this, attr, value);
                     modelMap[attr] = value;
-                    attributes[attr] = value.attributes;
-                    hasChange = true;
+                    attributes[attr] = value.$attributes;
+                    isChange = true;
                 } else if (isArray(value)) {
-                    value = createCollection(this, attr, value);
+                    value = createArray(this, attr, value);
                     modelMap[attr] = value;
-                    attributes[attr] = value.array;
-                    hasChange = true;
+                    attributes[attr] = value.$array;
+                    isChange = true;
                 } else {
                     changes.push(this.key ? this.key + "." + attr : attr, value, attributes[attr]);
                     attributes[attr] = value;
-                    isInModelMap && delete modelMap[attr];
-                    hasChange = true;
+                    isChange = true;
                 }
             }
         }
 
-        if (hasChange) {
+        if (isChange) {
             updateReference(updateViewNextTick(this));
 
             for (var i = 0, length = changes.length; i < length; i += 3) {
@@ -289,21 +283,59 @@ export default class Model {
                 }), changes[i + 1], changes[i + 2]);
             }
         } else {
-            this.attributes = oldAttributes;
+            this.$attributes = oldAttributes;
         }
         this._isSetting = false;
-        this._hasChange = hasChange;
+        this._isChange = isChange;
+
+        if (process.env.NODE_ENV === 'development') {
+            Object.freeze(this.$attributes);
+        }
 
         return this;
     }
 
     contains(model) {
         if (model === this) return false;
-
-        for (var parent = model.parent; parent; parent = model.parent) {
+        for (var parent = model.parent; parent; parent = parent.parent) {
             if (parent === this) return true;
         }
         return false;
+    }
+
+    restore() {
+        if (isPlainObject(this.$attributes)) {
+            var data = {};
+            for (var key in this.$attributes) {
+                data[key] = null;
+            }
+            this.set(data);
+        } else {
+            this.set(null);
+        }
+    }
+
+    collection(key) {
+        !key && (key = 'collection');
+
+        var result = this._(key);
+        if (result == null) {
+            this.set(key, []);
+            return this.$model[key];
+        }
+        return result;
+    }
+
+    model(key) {
+        if (!this.$model[key]) this.set(key, {});
+        return this.$model[key];
+    }
+
+    observable(key) {
+        if (this.$model[key]) return this.$model[key];
+
+        var value = this.$attributes[key];
+        return this.model(key).set(value);
     }
 
     /**
@@ -319,74 +351,13 @@ export default class Model {
         });
     }
 
-    /**
-     * 监听子 Model / Collection 变化
-     */
-    observe(key, fn) {
-        if (typeof key === 'function') {
-            fn = key;
-            key = this.key || '';
-        } else {
-            key = ':' + (this.key ? this.key + '.' + key : key);
-        }
-
-        var self = this;
-        var cb = function (e) {
-            if (e.target === self || self.contains(e.target)) {
-                return fn.call(self, e);
-            }
-        }
-        cb._cb = fn;
-
-        return this.root.on(DATACHANGED_EVENT + key, cb);
+    getJSON(key) {
+        return deepClone(this.get(key));
     }
 
-    unobserve(key, fn) {
-        if (typeof key === 'function') {
-            fn = key;
-            key = this.key || '';
-        } else {
-            key = ':' + (this.key ? this.key + '.' + key : key);
-        }
-
-        return this.root.off(DATACHANGED_EVENT + key, fn);
-    }
-
-    restore() {
-        var data = {};
-        for (var key in this.attributes) {
-            data[key] = null;
-        }
-        this.set(data);
-    }
-
-    collection(key) {
-        !key && (key = 'collection');
-
-        var result = this._(key);
-        if (result == null) {
-            this.set(key, []);
-            return this._model[key];
-        }
-        return result;
-    }
-
-    model(key) {
-        if (!this._model[key]) this.set(key, {});
-        return this._model[key];
-    }
-
-    renderNextTick() {
-        if (!this._nextTick) {
-            this._nextTick = nextTick(this.render);
-        }
-    }
-
-    render() {
-        this.trigger(new Event(DATACHANGED_EVENT, {
-            target: this
-        }));
+    toJSON() {
+        return extend(true, {}, this.$attributes);
     }
 }
 
-Object.assign(Model.prototype, EventEmitter.prototype)
+mixinDataSet(Model);

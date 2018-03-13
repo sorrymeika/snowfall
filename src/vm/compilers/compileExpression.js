@@ -1,14 +1,18 @@
-import { testRegExp, codeRegExp } from '../utils/regex'
+import { testRegExp, codeRegExp } from '../../utils/regex';
 
 const KEYWORDS = {
+    'sl': true,
     'new': true,
     'this': true,
     'function': true,
+    'Function': true,
     'return': true,
-    'instanceof': true,
-    'typeof': true,
+    'if': true,
+    'else': true,
     '$': true,
     '$data': true,
+    'instanceof': true,
+    'typeof': true,
     'Object': true,
     'Array': true,
     'JSON': true,
@@ -23,7 +27,7 @@ const KEYWORDS = {
 };
 
 var RE_MATCH_EXPRESSION = codeRegExp("{...}", 'g');
-var RE_EXPRESSION = /'(?:(?:\\{2})+|\\'|[^'])*'|"(?:(?:\\{2})+|\\"|[^"])*\"|function\s*\((.*?)\)|\bvar\s+('(?:(?:\\{2})+|\\'|[^'])*'|[^;]+);|(?:\{|,)\s*[\w$]+\s*:\s*|([\w$]+)\(|([\w$]+(?:\.[\w$]+|\[[\w$\']+\])*)(\()?/g;
+var RE_EXPRESSION = /'(?:(?:\\{2})+|\\'|[^'])*'|"(?:(?:\\{2})+|\\"|[^"])*"|function\s*\((.*?)\)|\bvar\s+('(?:(?:\\{2})+|\\'|[^'])*'|[^;]+);|(?:\{|,)\s*[\w$]+\s*:\s*|([\w$]+)\(|([\w$]+(?:\.[\w$]+|\[[\w$']+\])*)(\()?/g;
 var RE_VARS = /([\w$]+)\s*(?:=(?:'(?:\\'|[^'])*'|[^;,]+))?/g;
 var RE_VALUE = /^(-?\d+(\.\d+)?|true|false|undefined|null|'(?:\\'|[^'])*')$/;
 
@@ -75,7 +79,7 @@ export default function compileExpression(expression, withBraces) {
     content += ';}catch(e){console.error(e);return \'\';}';
 
     if (variables.length) {
-        content = 'var ' + variables.join(',') + ';' + content
+        content = 'var ' + variables.join(',') + ';' + content;
     }
 
     return {
@@ -85,12 +89,14 @@ export default function compileExpression(expression, withBraces) {
 }
 
 function parseExpression(expression, variables) {
-    var fnParamsCache = {};
-    return expression.replace(RE_EXPRESSION, function (match, fnParams, vars, fn, name, lastIsFn, index) {
-        if (fnParams) {
-            fnParams.split(',').forEach(function (param) {
-                fnParamsCache[param.trim()] = true;
-            })
+    var functionInputs = {};
+    var lastPoint;
+
+    return expression.replace(RE_EXPRESSION, function (match, inputs, vars, fn, name, bracket, index) {
+        if (inputs) {
+            inputs.split(',').forEach(function (param) {
+                functionInputs[param.trim()] = true;
+            });
         } else if (vars) {
             var mVar;
             while ((mVar = RE_VARS.exec(vars))) {
@@ -102,19 +108,19 @@ function parseExpression(expression, variables) {
         } else if (fn) {
             return (KEYWORDS[fn] ? fn : '$data.' + fn) + '(';
         } else if (name) {
-            return lastIsFn
-                ? valueExpression(name.substr(0, lastIsFn = name.lastIndexOf('.')), variables, fnParamsCache) + name.substr(lastIsFn) + "("
-                : valueExpression(name, variables, fnParamsCache);
+            return bracket
+                ? valueExpression(name.substr(0, lastPoint = name.lastIndexOf('.')), variables, functionInputs) + name.substr(lastPoint) + "("
+                : valueExpression(name, variables, functionInputs);
         }
         return match;
-    })
+    });
 }
 
 function compileToString(str) {
     return str ? '\'' + str.replace(/\\/g, '\\\\').replace(/'/g, '\\\'') + '\'' : str;
 }
 
-function valueExpression(str, variables, fnParams) {
+function valueExpression(str, variables, functionInputs) {
     if (RE_VALUE.test(str)) return str;
 
     var arr = str.split('.');
@@ -122,7 +128,7 @@ function valueExpression(str, variables, fnParams) {
     var code = '';
     var gb = '$data';
 
-    if (!alias || KEYWORDS[alias] || (fnParams && fnParams[alias]) || (variables.length && variables.indexOf(alias) !== -1)) {
+    if (!alias || KEYWORDS[alias] || (functionInputs && functionInputs[alias]) || (variables.length && variables.indexOf(alias) !== -1)) {
         return str;
     } else {
         switch (alias) {
@@ -132,6 +138,7 @@ function valueExpression(str, variables, fnParams) {
             case 'util':
             case '$filter':
                 return gb + '.' + str;
+            default:
         }
     }
 

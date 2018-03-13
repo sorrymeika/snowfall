@@ -2,11 +2,11 @@ var toString = Object.prototype.toString;
 
 export default function is(type) {
     return function (obj) {
-        return toString.call(obj) == "[object " + type + "]"
-    }
+        return toString.call(obj) == "[object " + type + "]";
+    };
 }
 
-export const isObject = is("Object")
+export const isObject = is("Object");
 
 export const isArray = Array.isArray || is("Array");
 
@@ -16,6 +16,10 @@ export function isString(str) {
 
 export function isNumber(str) {
     return typeof str == 'number' || toString.call(str) == "[object Number]";
+}
+
+export function isBoolean(str) {
+    return typeof str == 'boolean' || toString.call(str) == "[object Boolean]";
 }
 
 export function isFunction(fn) {

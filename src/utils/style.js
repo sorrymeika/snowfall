@@ -1,12 +1,12 @@
 var guid = 0;
 
-export default function style(id, css, isReplace) {
+export function style(id, css, isReplace) {
     var doc = document,
         head = doc.getElementsByTagName("head")[0];
 
     if (css === undefined) {
         css = id;
-        id = "style" + guid++;
+        id = "style" + (++guid);
     }
     var style = document.getElementById(id);
     if (style) {
@@ -16,7 +16,7 @@ export default function style(id, css, isReplace) {
             return style;
         }
     }
-
+    
     style = doc.createElement("style");
     style.id = id;
     style.type = "text/css";
@@ -29,3 +29,4 @@ export default function style(id, css, isReplace) {
 
     return style;
 }
+export default style;

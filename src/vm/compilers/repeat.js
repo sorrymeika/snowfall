@@ -1,8 +1,10 @@
-import { $, ELEMENT_NODE, COMMENT_NODE, cloneElement, closestElement, insertElementAfter } from '../utils/dom';
-import compileExpression from './compileExpression'
-import { findModelByKey, createCollection } from '../adapter'
-import { value as valueOfObject } from '../../utils/object'
-import { isNumber } from '../../utils/is'
+import { $, ELEMENT_NODE, COMMENT_NODE, cloneElement, closestElement, insertElementAfter } from '../../utils/dom';
+import compileExpression from './compileExpression';
+import { findModelByKey } from '../adapter';
+import { value as valueOfObject } from '../../utils/object';
+import { isNumber } from '../../utils/is';
+import Collection from '../Collection';
+import NodeUpdateResult from './NodeUpdateResult';
 
 const SN_REPEAT = 'sn-repeat';
 
@@ -14,7 +16,7 @@ var ORDER_BY_THIS_FUNCTION = 1;
 var ORDER_BY_DELEGATE_FUNCTION = 2;
 var ORDER_BY_ATTRIBUTES_FUNCTION = 3;
 
-var RE_REPEAT = /([\w$]+)(?:\s*,(\s*[\w$]+)){0,1}\s+in\s+([\w$]+(?:\.[\w$\(,\)]+){0,})(?:\s*\|\s*filter\s*:\s*(.+?)){0,1}(?:\s*\|\s*orderBy:(.+)){0,1}(\s|$)/;
+var RE_REPEAT = /([\w$]+)(?:\s*,\s*([\w$]+)){0,1}\s+in\s+([\w$]+(?:\.[\w$\(,\)]+){0,})(?:\s*\|\s*filter\s*:\s*(.+?)){0,1}(?:\s*\|\s*orderBy:(.+)){0,1}(\s|$)/;
 
 function initCollectionKey(template, compiler, collectionKey) {
     if (collectionKey.slice(-1) == ')') {
@@ -43,7 +45,7 @@ function initCollectionKey(template, compiler, collectionKey) {
 
 
 function updateRepeatView(template, nodeData) {
-    var el = nodeData.el;
+    var el = nodeData.node;
     var viewModel = template.viewModel;
     var repeatCompiler = el.snRepeatCompiler;
     var collection = el.snCollection;
@@ -75,11 +77,11 @@ function updateRepeatView(template, nodeData) {
                     model = parentNode.snModel;
                     return true;
                 }
-            })
+            });
         }
 
         if (repeatCompiler.isFn) {
-            collection = new createCollection(viewModel, repeatCompiler.collectionKey, collectionData);
+            collection = new Collection(viewModel, repeatCompiler.collectionKey, collectionData);
         } else {
             collection = model && findModelByKey(model, repeatCompiler.collectionKey);
         }
@@ -149,7 +151,7 @@ function updateRepeatView(template, nodeData) {
                 sortFn = valueOfObject(viewModel.delegate, orderBy);
                 break;
             case ORDER_BY_ATTRIBUTES_FUNCTION:
-                sortFn = valueOfObject(viewModel.attributes, orderBy);
+                sortFn = valueOfObject(viewModel.$attributes, orderBy);
                 break;
             default:
                 // orderBy=['a',true,someFunctionId,false]
@@ -186,7 +188,7 @@ function updateRepeatView(template, nodeData) {
                 };
         }
         sortFn && list.sort(function (a, b) {
-            return sortFn(a.model.attributes, b.model.attributes);
+            return sortFn(a.model.$attributes, b.model.$attributes);
         });
     }
 
@@ -224,7 +226,7 @@ function cloneRepeatElement(viewModel, source, snData) {
         if (node.snEvents) {
             node.snEvents.forEach(function (evt) {
                 $(clone).on(evt, viewModel._handleEvent);
-            })
+            });
         }
         if (node.snRepeatCompiler) clone.snRepeatCompiler = node.snRepeatCompiler;
         if (node.snIfSource) {
@@ -235,44 +237,6 @@ function cloneRepeatElement(viewModel, source, snData) {
             snIfSource.snIf = clone;
         }
     });
-}
-
-export class RepeatNodeCompiler {
-    constructor(template) {
-        this.template = template;
-        this.viewModel = template.viewModel;
-    }
-
-    compile(node) {
-        if (isRepeatableNode(node)) {
-            if (process.env.NODE_ENV === 'development') {
-                if (node.getAttribute('sn-if')) {
-                    throw new Error('can not use sn-if and sn-repeat at the same time!!please use filter instead!!');
-                }
-            }
-
-            var parentRepeatCompiler;
-            var parentNode = node;
-
-            while ((parentNode = (parentNode.snIf || parentNode).parentNode) && !parentNode.snViewModel) {
-                if (parentNode.snRepeatCompiler) {
-                    parentRepeatCompiler = parentNode.snRepeatCompiler;
-                    break;
-                }
-            }
-
-            node.snRepeatCompiler = new RepeatCompiler(this.template, node, parentRepeatCompiler);
-            return { nextSibling: node.nextSibling }
-        }
-    }
-
-    update(nodeData) {
-        var node = nodeData.node;
-        if (node.nodeType == COMMENT_NODE && node.snRepeatCompiler) {
-            updateRepeatView(this.template, nodeData);
-            return true;
-        }
-    }
 }
 
 export default class RepeatCompiler {
@@ -356,10 +320,49 @@ export default class RepeatCompiler {
                 }
                 sortType = (sortType && sortType.charAt(0) == '{' && sortType.slice(-1) == '}')
                     ? template.compileToFunction(viewModel, sortType)
-                    : sortType == 'desc' ? false : true;
+                    : sortType !== 'desc';
 
                 orderBy.push(sortKey, sortType);
             });
+        }
+    }
+}
+
+export class RepeatNodeCompiler {
+    constructor(template) {
+        this.template = template;
+        this.viewModel = template.viewModel;
+    }
+
+    compile(node) {
+        if (isRepeatableNode(node)) {
+            if (process.env.NODE_ENV === 'development') {
+                if (node.getAttribute('sn-if')) {
+                    throw new Error('can not use sn-if and sn-repeat at the same time!!please use filter instead!!');
+                }
+            }
+            var nextSibling = node.nextSibling;
+            var parentRepeatCompiler;
+            var parentNode = node;
+
+            while ((parentNode = (parentNode.snIf || parentNode).parentNode) && !parentNode.snViewModel) {
+                if (parentNode.snRepeatCompiler) {
+                    parentRepeatCompiler = parentNode.snRepeatCompiler;
+                    break;
+                }
+            }
+
+            node.snRepeatCompiler = new RepeatCompiler(this.template, node, parentRepeatCompiler);
+
+            return { nextSibling };
+        }
+    }
+
+    update(nodeData) {
+        var node = nodeData.node;
+        if (node.nodeType == COMMENT_NODE && node.snRepeatCompiler) {
+            updateRepeatView(this.template, nodeData);
+            return new NodeUpdateResult({ isBreak: true });
         }
     }
 }

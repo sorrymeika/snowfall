@@ -1,7 +1,7 @@
 
 
 export function testRegExp(regExp, val) {
-    return regExp.lastIndex != 0 && (regExp.lastIndex = 0) || regExp.test(val);
+    return (regExp.lastIndex != 0 && (regExp.lastIndex = 0)) || regExp.test(val);
 }
 
 // var regExpRE = "\/(?:(?:\\{2})+|\\\/|[^\/\r\n])+\/[img]*(?=[\)|\.|,])"

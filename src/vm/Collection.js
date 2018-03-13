@@ -1,38 +1,38 @@
-import { isArray } from '../utils/is'
-import { identify } from '../utils/guid'
-import * as arrayUtils from '../utils/array'
-import { extend } from '../utils/clone'
-import {
-    isModel,
-    updateReference,
-    updateViewNextTick,
-    createModel,
-    linkModels,
-    unlinkModels
-} from './adapter'
+import { isArray } from '../utils/is';
+import { identify } from '../utils/guid';
+import * as arrayUtils from '../utils/array';
+import { extend } from '../utils/clone';
+import { isModel, updateReference, updateViewNextTick, createModelFactory } from './adapter';
+import { linkModels, unlinkModels } from './linker';
+
+import { mixinDataSet } from './DataSet';
 
 var RE_COLL_QUERY = /\[((?:'(?:\\'|[^'])*'|"(?:\\"|[^"])*"|[^\]])+)\](?:\[([\+\-]?)(\d+)?\])?(?:\.(.*))?/;
 
-var COLLECTION_UPDATE_ONLY_MATCHED = 2;
-var COLLECTION_UPDATE_MATCHED_AND_REMOVE_UNMATCHED = 3;
+var COLLECTION_UPDATE_ONLY_EXISTS = 2;
+var COLLECTION_UPDATE_TO = 3;
 
-function beginUpdate(collection) {
+function collectionWillUpdate(collection) {
     if (!collection._isSetting) {
         collection._isSetting = 1;
-        collection._hasChange = false;
-        collection.__arrayBackup = collection.array;
-        collection.array = collection.array.slice();
+        collection._isChange = false;
+        collection.__arrayBackup = collection.$array;
+        collection.$array = collection.$array.slice();
     } else {
         collection._isSetting++;
     }
 }
 
-function endUpdate(collection) {
+function collectionDidUpdate(collection) {
     if (collection._isSetting && --collection._isSetting == 0) {
-        if (collection._hasChange) {
+        if (collection._isChange) {
             updateReference(updateViewNextTick(collection));
+
+            if (process.env.NODE_ENV === 'development') {
+                Object.freeze(collection.$array);
+            }
         } else if (collection.__arrayBackup) {
-            collection.array = collection.__arrayBackup;
+            collection.$array = collection.__arrayBackup;
         }
         collection._isSetting = false;
         collection.__arrayBackup = null;
@@ -40,32 +40,54 @@ function endUpdate(collection) {
     return collection;
 }
 
+function createChild(collection, name, child) {
+    const ChildFactory = collection.constructor.createChildFactory(name, child);
+    return new ChildFactory(collection, name, child);
+}
+
 export default class Collection {
+    static createChildFactory = createModelFactory;
+
     constructor(parent, attributeName, array) {
+        var parentKey;
+
         if (isArray(parent)) {
             array = parent;
             parent = null;
         }
 
-        if (!parent) parent = new createModel();
-
-        if (!attributeName) attributeName = "$list";
+        if (!attributeName) attributeName = "$array";
 
         this.cid = identify();
+        this.$array = [];
+        this.render = this.render.bind(this);
 
-        this.parent = parent;
-        this.key = parent.key ? (parent.key + "." + attributeName) : attributeName;
+        if (!parent) {
+            this.root = this;
+        } else {
+            this.parent = parent;
+            this.root = parent.root;
+            parentKey = parent.key;
+            parent.$attributes[attributeName] = this.$array;
+        }
+
+        this.key = parentKey ? (parentKey + "." + attributeName) : attributeName;
         this._key = attributeName;
 
-        this.root = parent.root;
         this.changed = false;
 
-        parent.attributes[attributeName] = this.array = [];
-
-        if (array) this.add(array);
+        if (array && array.length) this.add(array);
     }
 
-    length = 0
+    get array() {
+        return this.$array;
+    }
+
+    set array(val) {
+        this.set(val);
+    }
+
+    length = 0;
 
     /**
      * 查询Collection的子Model/Collection
@@ -118,10 +140,10 @@ export default class Collection {
             return (model = this[query]) ? (next ? model : model._(next)) : null;
 
         var operation = match[2];
-        var index = match[3] ? parseInt(match[3]) : operation == '+' ? 0 : undefined;
+        var index = match[3] ? parseInt(match[3], 10) : operation == '+' ? 0 : undefined;
 
         var test = arrayUtils.query(query);
-        var array = this.array;
+        var array = this.$array;
         var results;
         var i = 0;
         var n = array.length;
@@ -173,24 +195,42 @@ export default class Collection {
         }
     }
 
+    size() {
+        return this.$array.length;
+    }
+
+    map(fn) {
+        return arrayUtils.map(this.$array, fn);
+    }
+
+    indexOf(key, val) {
+        return isModel(key) ? Array.prototype.indexOf.call(this, key) :
+            arrayUtils.indexOf(this.$array, key, val);
+    }
+
+    lastIndexOf(key, val) {
+        return isModel(key) ? Array.prototype.lastIndexOf.call(this, key) :
+            arrayUtils.lastIndexOf(this.$array, key, val);
+    }
+
     getOrCreate(obj) {
-        var index = arrayUtils.indexOf(this.array, obj);
+        var index = arrayUtils.indexOf(this.$array, obj);
         return index !== -1 ? this[index] : this.add(obj);
     }
 
-    get = function (i) {
-        if (i == undefined) return this.array;
+    get(i) {
+        if (i == undefined) return this.$array;
 
         return this[i].get();
     }
 
-    set = function (array) {
+    set(array) {
         if (!array || array.length == 0) {
             this.clear();
         } else {
             var modelsLen = this.length;
 
-            beginUpdate(this);
+            collectionWillUpdate(this);
 
             if (array.length < modelsLen) {
                 this.splice(array.length, modelsLen - array.length);
@@ -198,41 +238,41 @@ export default class Collection {
 
             var i = 0;
             var item;
-            var hasChange = false;
+            var isChange = false;
 
             this.each(function (model) {
                 item = array[i];
 
                 if (isModel(item)) {
                     if (item != model) {
-                        hasChange = true;
+                        isChange = true;
                         unlinkModels(this, model);
                         linkModels(this, item, this.key + '^child');
 
                         this[i] = item;
-                        this.array[i] = item.attributes;
+                        this.$array[i] = item.$attributes;
                     }
                 } else {
                     model.set(true, item);
-                    if (model._hasChange) {
-                        hasChange = true;
+                    if (model._isChange) {
+                        isChange = true;
                     }
                 }
 
                 i++;
             });
 
-            if (hasChange) this._hasChange = true;
+            if (isChange) this._isChange = true;
 
             this.add(i == 0 ? array : array.slice(i, array.length));
 
-            endUpdate(this);
+            collectionDidUpdate(this);
         }
         return this;
     }
 
     add(array) {
-        beginUpdate(this);
+        collectionWillUpdate(this);
 
         var model;
         var dataIsArray = isArray(array);
@@ -251,18 +291,18 @@ export default class Collection {
                     linkModels(this, dataItem, this.key + '^child');
                     model = dataItem;
                 } else {
-                    model = new createModel(this, this.length, dataItem);
+                    model = createChild(this, this.length, dataItem);
                 }
 
                 this[this.length++] = model;
-                this.array.push(model.attributes);
+                this.$array.push(model.$attributes);
 
                 results.push(model);
             }
-            this._hasChange = true;
+            this._isChange = true;
         }
 
-        endUpdate(this);
+        collectionDidUpdate(this);
 
         return dataIsArray ? results : results[0];
     }
@@ -278,17 +318,17 @@ export default class Collection {
      * @return {Collection} self
      */
     updateBy(attributeName, val, data) {
-        beginUpdate(this);
-        var array = this.array;
+        collectionWillUpdate(this);
+        var array = this.$array;
         for (var i = 0; i < array.length; i++) {
             if (array[i][attributeName] === val) {
                 this[i].set(data);
-                if (this[i]._hasChange) {
-                    this._hasChange = true;
+                if (this[i]._isChange) {
+                    this._isChange = true;
                 }
             }
         }
-        return endUpdate(this);
+        return collectionDidUpdate(this);
     }
 
     /**
@@ -297,9 +337,9 @@ export default class Collection {
      * @param {Array} arr 需要更新的数组
      * @param {String|Function} primaryKey 唯一健 或 (a, b)=>boolean
      * @param {number} [updateType] 更新类型
-     * COLLECTION_UPDATE_DEFAULT - collection中存在既覆盖，不存在既添加
-     * COLLECTION_UPDATE_MATCHED_AND_REMOVE_UNMATCHED - 根据arr更新，不在arr中的项将被删除
-     * COLLECTION_UPDATE_ONLY_MATCHED - 只更新collection中存在的
+     * undefined|0 - collection中存在既增量更新，不存在既添加
+     * COLLECTION_UPDATE_TO - 根据arr更新，不在arr中的项将被删除
+     * COLLECTION_UPDATE_ONLY_EXISTS - 只更新collection中存在的
      * 
      * @return {Collection} self
      */
@@ -310,16 +350,16 @@ export default class Collection {
         var length = this.length;
 
         if (!length) {
-            (updateType !== COLLECTION_UPDATE_ONLY_MATCHED) && this.add(arr);
+            (updateType !== COLLECTION_UPDATE_ONLY_EXISTS) && this.add(arr);
             return this;
         }
 
-        beginUpdate(this);
+        collectionWillUpdate(this);
 
         if (typeof primaryKey === 'string') {
             fn = function (a, b) {
                 return a[primaryKey] == b[primaryKey];
-            }
+            };
         } else fn = primaryKey;
 
         var item;
@@ -331,9 +371,10 @@ export default class Collection {
 
         var n = arr.length;
         var result;
+        var isUpdateToNewArray = updateType === COLLECTION_UPDATE_TO;
 
         for (var i = length - 1; i >= 0; i--) {
-            item = this.array[i];
+            item = this.$array[i];
             exists = false;
 
             for (var j = 0; j < n; j++) {
@@ -341,9 +382,9 @@ export default class Collection {
 
                 if (arrItem !== undefined) {
                     if ((result = fn.call(this, item, arrItem))) {
-                        this[i].set(typeof result == 'object' ? result : arrItem);
-                        if (this[i]._hasChange) {
-                            this._hasChange = true;
+                        this[i].set(isUpdateToNewArray, typeof result == 'object' ? result : arrItem);
+                        if (this[i]._isChange) {
+                            this._isChange = true;
                         }
                         arr[j] = undefined;
                         exists = true;
@@ -352,35 +393,34 @@ export default class Collection {
                 }
             }
 
-            if (updateType === COLLECTION_UPDATE_MATCHED_AND_REMOVE_UNMATCHED && !exists) {
+            if (isUpdateToNewArray && !exists) {
                 this.splice(i, 1);
             }
         }
 
-        if (updateType !== COLLECTION_UPDATE_ONLY_MATCHED) {
+        if (updateType !== COLLECTION_UPDATE_ONLY_EXISTS) {
             var appends = [];
             for (i = 0; i < n; i++) {
                 if (arr[i] !== undefined) {
                     appends.push(arr[i]);
                 }
             }
-
             if (appends.length) {
                 this.add(appends);
             }
         }
 
-        return endUpdate(this);
+        return collectionDidUpdate(this);
     }
 
-    // 已有项将被增量覆盖，不在arr中的项将被删除
+    // 已有项将被覆盖，不在arr中的项将被删除
     updateTo(arr, primaryKey) {
-        return this.update(arr, primaryKey, COLLECTION_UPDATE_MATCHED_AND_REMOVE_UNMATCHED);
+        return this.update(arr, primaryKey, COLLECTION_UPDATE_TO);
     }
 
-    // 只更新collection中匹配到的
-    updateMatched(arr, primaryKey) {
-        return this.update(arr, primaryKey, COLLECTION_UPDATE_ONLY_MATCHED);
+    // 只更新collection中存在的
+    updateExists(arr, primaryKey) {
+        return this.update(arr, primaryKey, COLLECTION_UPDATE_ONLY_EXISTS);
     }
 
     unshift(data) {
@@ -388,7 +428,7 @@ export default class Collection {
     }
 
     insert(index, data) {
-        beginUpdate(this);
+        collectionWillUpdate(this);
 
         var model;
         var count;
@@ -405,26 +445,26 @@ export default class Collection {
                 linkModels(this, model, this.key + '^child');
             } else {
                 count = index + i;
-                model = new createModel(this, count, dataItem);
+                model = createChild(this, count, dataItem);
             }
 
-            Array.prototype.splice.call(this, count, 0, model)
-            this.array.splice(count, 0, model.attributes);
+            Array.prototype.splice.call(this, count, 0, model);
+            this.$array.splice(count, 0, model.$attributes);
         }
-        this._hasChange = true;
+        this._isChange = true;
 
-        return endUpdate(this);
+        return collectionDidUpdate(this);
     }
 
     splice(start, count, data) {
-        beginUpdate(this);
+        collectionWillUpdate(this);
 
         if (!count) count = 1;
 
         var root = this.root;
         var spliced = Array.prototype.splice.call(this, start, count);
-        this.array.splice(start, count);
-        this._hasChange = true;
+        this.$array.splice(start, count);
+        this._isChange = true;
 
         if (root._linkedModels) {
             var self = this;
@@ -433,9 +473,9 @@ export default class Collection {
             });
         }
 
-        endUpdate(data
-            ? this.insert(start, data)
-            : this);
+        data && this.insert(start, data);
+
+        collectionDidUpdate(this);
 
         return spliced;
     }
@@ -447,16 +487,16 @@ export default class Collection {
      * @param {any} val
      */
     remove(key, val) {
-        beginUpdate(this);
+        collectionWillUpdate(this);
 
-        var array = this.array;
+        var array = this.$array;
         var fn = typeof key === 'function'
             ? key
             : isModel(key)
                 ? function (item, i) {
                     return this[i] === key;
                 }
-                : function (item) {
+                : (item) => {
                     return item[key] == val;
                 };
 
@@ -464,29 +504,35 @@ export default class Collection {
             if (fn.call(this, array[i], i)) {
                 Array.prototype.splice.call(this, i, 1);
                 array.splice(i, 1);
-                this._hasChange = true;
+                this._isChange = true;
             }
         }
 
-        return endUpdate(this);
+        return collectionDidUpdate(this);
     }
 
     clear() {
-        if (this.length == 0 && this.array.length == 0) return this;
+        if (this.length == 0 && this.$array.length == 0) return this;
         for (var i = 0; i < this.length; i++) {
             delete this[i];
         }
-        this.array = [];
+        this.$array = [];
         this.length = 0;
         this._isSetting = 1;
-        this._hasChange = true;
+        this._isChange = true;
 
-        return endUpdate(this);
+        return collectionDidUpdate(this);
     }
 
     each(start, end, fn) {
-        if (typeof start == 'function') fn = start, start = 0, end = this.length;
-        else if (typeof end == 'function') fn = end, end = this.length;
+        if (typeof start == 'function') {
+            fn = start;
+            start = 0;
+            end = this.length;
+        } else if (typeof end == 'function') {
+            fn = end;
+            end = this.length;
+        }
 
         for (; start < end; start++) {
             if (fn.call(this, this[start], start) === false) break;
@@ -496,49 +542,57 @@ export default class Collection {
 
     find(key, val) {
         var i = 0;
-        var n = this.array.length;
+        var n = this.$array.length;
 
         if (typeof key === 'function') {
             for (; i < n; i++) {
-                if (key.call(this, this.array[i], i)) return this[i];
+                if (key.call(this, this.$array[i], i)) return this[i];
             }
         } else {
             for (; i < n; i++) {
-                if (this.array[i][key] == val) return this[i];
+                if (this.$array[i][key] == val) return this[i];
             }
         }
         return null;
     }
 
-    size() {
-        return this.array.length;
-    }
-
-    map(fn) {
-        return arrayUtils.map(this.array, fn);
-    }
-
-    indexOf(key, val) {
-        return isModel(key) ? Array.prototype.indexOf.call(this, key) :
-            arrayUtils.indexOf(this.array, key, val);
-    }
-
-    lastIndexOf(key, val) {
-        return isModel(key) ? Array.prototype.lastIndexOf.call(this, key) :
-            arrayUtils.lastIndexOf(this.array, key, val);
+    filter(key, val) {
+        return arrayUtils.filter(this.$array, key, val);
     }
 
     last() {
         return this.length === 0 ? null : this[this.length - 1];
     }
 
-    filter(key, val) {
-        return arrayUtils.filter(this.array, key, val);
+    sort(fn) {
+        var n = this.$array.length;
+        if (n === 0) return this;
+
+        collectionWillUpdate(this);
+
+        var i = 0;
+        for (; i < n; i++) {
+            this[i].$i = i;
+        }
+        Array.prototype.sort.call(this, function (a, b) {
+            return fn(a.$attributes, b.$attributes, a.$i, b.$i);
+        });
+
+        for (i = 0; i < n; i++) {
+            if (this.$array[i] != this[i].$attributes) {
+                this.$array[i] = this[i].$attributes;
+                this._isChange = true;
+            }
+        }
+
+        return collectionDidUpdate(this);
     }
 
     toJSON() {
-        return extend(true, [], this.array);
+        return extend(true, [], this.$array);
     }
 }
 
 Collection.prototype.toArray = Collection.prototype.toJSON;
+
+mixinDataSet(Collection);

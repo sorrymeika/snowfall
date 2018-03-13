@@ -1,12 +1,7 @@
-import * as stringUtils from '../utils/array'
-import * as arrayUtils from '../utils/array'
-import * as objectUtils from '../utils/object'
-
-import { isModel, isCollection } from './adapter'
-import * as $filter from '../filter'
-import compileExpression from './compileExpression'
-
-const util = Object.assign({}, stringUtils, arrayUtils, objectUtils);
+import * as util from '../../utils';
+import { isModel, isCollection } from '../adapter';
+import * as $filter from '../filter';
+import compileExpression from './compileExpression';
 
 var vmExpressionsId = 1;
 var vmExpressionsMap = {};
@@ -56,15 +51,15 @@ export default class FunctionCompiler {
             srcElement: element,
             util: util,
             $filter: $filter
-        }, this.viewModel.attributes);
+        }, this.viewModel.$attributes);
 
         if (snData) {
             for (var key in snData) {
                 var val = snData[key];
                 data[key] = isModel(val)
-                    ? val.attributes
+                    ? val.$attributes
                     : isCollection(val)
-                        ? val.array
+                        ? val.$array
                         : val;
             }
         }

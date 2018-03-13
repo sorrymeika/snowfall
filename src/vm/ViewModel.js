@@ -1,11 +1,58 @@
-import { isArray, isPlainObject } from '../utils/is'
-import * as objectUtils from '../utils/object'
-import nextTick from '../utils/nextTick'
-import { $, eachElement } from '../utils/dom'
-import Model from './Model'
-import { TemplateCompiler } from './compilers/template'
+import * as objectUtils from '../utils/object';
+import { $, eachElement } from '../utils/dom';
 
-import { DATACHANGED_EVENT } from './consts'
+import { unbindEvents, bindEvents } from './compilers/events';
+import { TemplateCompiler } from './compilers/template';
+
+import { Event } from '../core/event';
+
+import Model from './Model';
+
+function compileNewTemplate(viewModel, template) {
+    var $element = $(template);
+    $element.each(function () {
+        if (this.snViewModel) throw new Error("can not insert or append binded node!");
+    });
+
+    viewModel.compiler.compile(viewModel, $element);
+    viewModel.renderNextTick();
+
+    return $element;
+}
+
+function getRealElement(el) {
+    return el.snIfSource && el.snIfSource.snIfStatus
+        ? el.snIfSource
+        : null;
+}
+
+function findOwnNode(viewModel, node) {
+    if (typeof node == 'string') {
+        node = viewModel.$(node);
+
+        if (!node.length) {
+            console.error('is not own node');
+            return null;
+        }
+    } else {
+        var isOwnNode = false;
+
+        viewModel.$el.each(function () {
+            var parentNode = getRealElement(this);
+            if (parentNode && $.contains(parentNode, node)) {
+                isOwnNode = true;
+                return false;
+            }
+        });
+        if (!isOwnNode) {
+            console.error('is not own node');
+            return null;
+        }
+    }
+    return node;
+}
+
+export { Model };
 
 export default class ViewModel extends Model {
 
@@ -26,40 +73,26 @@ export default class ViewModel extends Model {
      * @param {Object} [attributes] 属性
      * @param {Array} [children] 子节点列表
      */
-    constructor(template, attributes, children) {
-        if (arguments.length === 1 && template && template.attributes && (template.el || template.delegate)) {
-            children = template.children;
-            attributes = template.attributes;
+    constructor(props = {}, children) {
+        super(props.attributes);
 
-            super(attributes);
-
-            this.components = template.components;
-            this.delegate = template.delegate;
-
-            template = template.el;
-        } else if (
-            (typeof attributes === 'undefined' || isArray(attributes)) &&
-            (template === undefined || template === null || isPlainObject(template))
-        ) {
-            children = attributes;
-            attributes = template;
-            super(attributes);
-            template = this.el;
-        } else {
-            super(attributes);
-        }
+        this.components = props.components;
+        this.delegate = props.delegate;
+        this.refs = {};
 
         this.compiler = new TemplateCompiler(this);
         this.children = children ? [].concat(children) : [];
-        this.eventId = 'sn-' + this.cid + 'model';
+        this.eventId = 'sn' + this.cid + 'model';
         this.repeats = {};
 
-        template && this.template(template);
+        props.el && (this.el = props.el);
+        this.el && this.template(this.el);
 
-        this.initialize && this.initialize(attributes);
+        this.initialize && this.initialize(this.$attributes);
     }
 
     template(el) {
+        var self = this;
         var $el = $(el);
         !this.$el && (this.$el = $());
 
@@ -67,13 +100,130 @@ export default class ViewModel extends Model {
             this.snViewModel = self;
         });
 
-        this.compiler.compile(this, $el);
+        this.compiler.compile($el);
 
         $el.each(function () {
             self.$el.push(this.snReplacement ? this.snReplacement : this);
         });
 
         return this;
+    }
+
+    parents() {
+        return this.$el && this.$el.parents();
+    }
+
+    $(selector) {
+        if (!this.$el) return $();
+
+        var $el = this.$el;
+        this.$el.each(function (i, el) {
+            var realEl = getRealElement(el);
+            if (realEl) {
+                $el = $el.add(realEl);
+            }
+        });
+        return $el.find(selector).add($el.filter(selector));
+    }
+
+    before(template, referenceNode) {
+        referenceNode = findOwnNode(this, referenceNode);
+        if (!referenceNode) return null;
+
+        return compileNewTemplate(this, template)
+            .insertBefore(referenceNode);
+    }
+
+    after(newNode, referenceNode) {
+        referenceNode = findOwnNode(this, referenceNode);
+        if (!referenceNode) return null;
+
+        return compileNewTemplate(this, newNode)
+            .insertAfter(referenceNode);
+    }
+
+    append(newNode, parentNode) {
+        parentNode = findOwnNode(this, parentNode);
+        if (!parentNode) return null;
+
+        return compileNewTemplate(this, newNode)
+            .appendTo(parentNode);
+    }
+
+    prepend(newNode, parentNode) {
+        parentNode = findOwnNode(this, parentNode);
+        if (!parentNode) return null;
+
+        return compileNewTemplate(this, newNode)
+            .prependTo(parentNode);
+    }
+
+    prependTo(parent) {
+        this.$el
+            .prependTo(parent)
+            .each(function (i, el) {
+                if (el.snIfSource && !el.snIfSource.parentNode && el.snIfSource.snIfStatus) {
+                    $(el.snIfSource).insertAfter(el);
+                }
+            });
+    }
+
+    appendTo(parent) {
+        this.$el
+            .appendTo(parent)
+            .each(function (i, el) {
+                if (el.snIfSource && !el.snIfSource.parentNode && el.snIfSource.snIfStatus) {
+                    $(el.snIfSource).insertAfter(el);
+                }
+            });
+    }
+
+    removeAllNodes() {
+        this.$el
+            .each(function (i, el) {
+                if (el.snIfSource) {
+                    $(el.snIfSource).remove();
+                }
+            })
+            .remove();
+    }
+
+    takeOff(childNode) {
+        childNode = findOwnNode(this, childNode);
+        if (!childNode) return null;
+
+        childNode.snViewModel = this;
+        this.$el.push(childNode);
+        bindEvents(this, $(childNode));
+        (this._takeOffEls || (this._takeOffEls = [])).push(childNode);
+        return childNode;
+    }
+
+    bringBack(childNode) {
+        var index = this.$el.indexOf(childNode);
+        if (index != -1) {
+            delete childNode.snViewModel;
+            Array.prototype.splice.call(this.$el, index, 1);
+            this._takeOffEls.splice(this._takeOffEls.indexOf(childNode), 1);
+            unbindEvents(this, $(childNode));
+        }
+    }
+
+    bringBackAll() {
+        var els = this._takeOffEls;
+        if (els) {
+            for (var i = els.length - 1; i >= 0; i--) {
+                var childNode = els[i];
+                var index = this.$el.indexOf(childNode);
+                if (index != -1) {
+                    delete childNode.snViewModel;
+                    Array.prototype.splice.call(this.$el, index, 1);
+                    unbindEvents(this, $(childNode));
+                }
+            }
+            this._takeOffEls = null;
+        }
+        return els;
     }
 
     dataOfElement(el, keys, value) {
@@ -108,13 +258,8 @@ export default class ViewModel extends Model {
     }
 
     nextTick(cb) {
-        return this._nextTick || this._rendering ? this.one('viewDidUpdate', cb) : cb.call(this);
-    }
-
-    renderNextTick() {
-        if (!this._nextTick) {
-            this._nextTick = this._rendering ? 1 : nextTick(this.render);
-        }
+        this._nextTick || this._rendering ? this.one('viewDidUpdate', cb) : cb.call(this);
+        return this;
     }
 
     render() {
@@ -123,103 +268,35 @@ export default class ViewModel extends Model {
 
         var compiler = this.compiler;
 
-        console.time('render-' + this.cid);
+        // console.time('render-' + this.cid);
+        var count = 0;
+
         do {
             this._nextTick = null;
-            this.trigger(new Event(DATACHANGED_EVENT, {
-                target: this
+            this.trigger(new Event('datachanged', {
+                target: this,
+                changeCount: count
             }));
 
+            this.refs = {};
             this.$el && eachElement(this.$el, (el) => {
                 if ((el.snViewModel && el.snViewModel != this) || this._nextTick) return false;
 
-                return compiler.updateNode(self, el);
+                return compiler.updateNode(el);
             });
-
+            count++;
         } while (this._nextTick);
-        console.timeEnd('render-' + this.cid);
+
+        // console.timeEnd('render-' + this.cid);
 
         this._rendering = false;
+
         this.trigger('viewDidUpdate');
         this.viewDidUpdate && this.viewDidUpdate();
     }
 
     destroy() {
-        this.trigger('destroy');
+        super.destroy();
+        this.$el = null;
     }
 }
-
-ViewModel.prototype.next = ViewModel.prototype.nextTick;
-
-function checkOwnNode(viewModel, node) {
-    if (typeof node == 'string') {
-        node = viewModel.$el.find(node);
-
-        if (!node.length)
-            throw new Error('is not own node');
-    } else {
-        var isOwnNode = false;
-        viewModel.$el.each(function () {
-            if ($.contains(this.snIfSource || this, node)) {
-                isOwnNode = true;
-                return false;
-            }
-        });
-        if (!isOwnNode) throw new Error('is not own node');
-    }
-    return node;
-}
-
-function compileNewTemplate(viewModel, template) {
-    var $element = $(template);
-    $element.each(function () {
-        if (this.snViewModel) throw new Error("can not insert or append binded node!");
-    });
-
-    viewModel.compiler.compile(viewModel, $element);
-    viewModel.renderNextTick();
-
-    return $element;
-}
-
-Object.assign(ViewModel.prototype, {
-    isOwnNode(node) {
-        if (typeof node == 'string') {
-            return !this.$el.find(node).length;
-        } else {
-            var flag = true;
-            this.$el.each(function () {
-                if (!$.contains(this, node)) return false;
-            });
-            return flag;
-        }
-    },
-
-    before(template, referenceNode) {
-        referenceNode = checkOwnNode(this, referenceNode);
-
-        return compileNewTemplate(this, template)
-            .insertBefore(referenceNode);
-    },
-
-    after(newNode, referenceNode) {
-        referenceNode = checkOwnNode(this, referenceNode);
-
-        return compileNewTemplate(this, newNode)
-            .insertAfter(referenceNode);
-    },
-
-    append(newNode, parentNode) {
-        parentNode = checkOwnNode(this, parentNode);
-
-        return compileNewTemplate(this, newNode)
-            .appendTo(parentNode);
-    },
-
-    prepend(newNode, parentNode) {
-        parentNode = checkOwnNode(this, parentNode);
-
-        return compileNewTemplate(this, newNode)
-            .prependTo(parentNode);
-    }
-});

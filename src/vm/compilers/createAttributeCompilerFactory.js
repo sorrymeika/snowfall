@@ -40,7 +40,7 @@ export default function createAttributeCompilerFactory(Compilers) {
         }
 
         compile(el, attr, val, withBraces) {
-            var fid = this.template.compileToFunction(val, withBraces)
+            var fid = this.template.compileToFunction(val, withBraces);
             if (fid) {
                 (el.snAttributes || (el.snAttributes = [])).push(attr, fid);
                 el.removeAttribute(attr);
@@ -49,6 +49,6 @@ export default function createAttributeCompilerFactory(Compilers) {
     }
 
     return function createAttributeCompiler(templateCompiler) {
-        return new AttributeCompiler(Compilers, templateCompiler);
-    }
+        return new AttributeCompiler(templateCompiler);
+    };
 }
