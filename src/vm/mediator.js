@@ -49,7 +49,7 @@ export function updateViewNextTick(model) {
         link = link.parent;
     }
 
-    root.one('datachanged', function (e) {
+    root.one('datachanged', function () {
         links.forEach((ln) => {
             ln._linkChanged = false;
         });
