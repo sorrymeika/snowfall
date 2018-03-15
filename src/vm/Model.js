@@ -276,11 +276,26 @@ export default class Model {
 
         if (isChange) {
             updateReference(updateViewNextTick(this));
-
-            for (var i = 0, length = changes.length; i < length; i += 3) {
-                root.trigger(new Event("change:" + changes[i], {
-                    target: this
-                }), changes[i + 1], changes[i + 2]);
+            if (root._changes) {
+                for (var i = 0, length = changes.length; i < length; i += 3) {
+                    var eventName = "change:" + changes[i];
+                    var tester = eventName;
+                    var lastIndex;
+                    while (1) {
+                        if (root._changes[tester]) {
+                            root.trigger(new Event(eventName, {
+                                target: this
+                            }), changes[i + 1], changes[i + 2]);
+                            break;
+                        }
+                        lastIndex = tester.lastIndexOf('.');
+                        if (lastIndex != -1) {
+                            tester = tester.slice(0, lastIndex);
+                        } else {
+                            break;
+                        }
+                    }
+                }
             }
         } else {
             this.$attributes = oldAttributes;
@@ -343,8 +358,11 @@ export default class Model {
      */
     change(attributeName, fn) {
         var self = this;
+        var eventName = "change:" + attributeName;
 
-        this.root.on("change:" + attributeName, function (e, oldValue, newValue) {
+        (root._changes || (root._changes = {}))[eventName] = true;
+
+        this.root.on(eventName, function (e, oldValue, newValue) {
             if (e.target === self) {
                 return fn.call(self, e, oldValue, newValue);
             }

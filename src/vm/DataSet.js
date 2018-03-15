@@ -1,32 +1,38 @@
 import { mixin as mixinEvent, Event } from '../core/event';
-import rAF from '../core/rAF';
 
-var nextTask = (fn) => setTimeout(fn, 0);
-var eventLoopId;
-var eventId = 1;
-var nextEvents = [];
+var nextTask;
+var taskId;
+var taskCount = 1;
+var callbacks = [];
 
-rAF(() => {
-    nextTask = rAF;
-});
+if (typeof MessageChannel !== 'undefined' && /^\[object MessageChannelConstructor\]$|\[native code\]/.test(MessageChannel.toString())) {
+    const channel = new MessageChannel();
+    const port = channel.port2;
+    channel.port1.onmessage = flushCallbacks;
+    nextTask = () => {
+        port.postMessage(1);
+    };
+} else {
+    nextTask = () => setTimeout(flushCallbacks, 0);
+}
 
-function evalNextTick() {
-    var events = nextEvents;
-    eventLoopId = null;
-    nextEvents = [];
+function flushCallbacks() {
+    var cbs = callbacks;
+    taskId = null;
+    callbacks = [];
 
-    for (var i = 0; i < events.length; i++) {
-        events[i]();
+    for (var i = 0; i < cbs.length; i++) {
+        cbs[i]();
     }
 }
 
 function nextTick(cb) {
-    nextEvents.push(cb);
-    if (!eventLoopId) {
-        nextTask(evalNextTick);
-        eventLoopId = ++eventId;
+    callbacks.push(cb);
+    if (!taskId) {
+        nextTask();
+        taskId = ++taskCount;
     }
-    return eventLoopId;
+    return taskId;
 }
 
 const DataSet = {
@@ -70,7 +76,7 @@ const DataSet = {
 
     renderNextTick() {
         if (!this._nextTick) {
-            this._nextTick = this._rendering ? 1 : (this.eventLoopId = nextTick(this.render));
+            this._nextTick = this._rendering ? 1 : (this.taskId = nextTick(this.render));
         }
     },
 
