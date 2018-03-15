@@ -1,27 +1,28 @@
 
 import Event from '../core/event';
 
-const factories = {};
+let Model;
+let Collection;
 
-export function initFactories(Model, Collection) {
-    factories.Model = Model;
-    factories.Collection = Collection;
+export function initFactories(ModelClass, CollectionClass) {
+    Model = ModelClass;
+    Collection = CollectionClass;
 }
 
 export function createModelFactory() {
-    return factories.Model;
+    return Model;
 }
 
 export function createCollectionFactory() {
-    return factories.Collection;
+    return Collection;
 }
 
 export function isModel(model) {
-    return model instanceof factories.Model;
+    return model instanceof Model;
 }
 
 export function isCollection(collection) {
-    return collection instanceof factories.Collection;
+    return collection instanceof Collection;
 }
 
 export function isModelOrCollection(model) {
@@ -48,7 +49,7 @@ export function updateViewNextTick(model) {
         link = link.parent;
     }
 
-    root.one('datachanged', function () {
+    root.one('datachanged', function (e) {
         links.forEach((ln) => {
             ln._linkChanged = false;
         });
@@ -143,7 +144,7 @@ export function updateModelByKeys(model, renew, keys, val) {
         key = keys[i];
 
         if (!isModel(model.$model[key])) {
-            tmp = model.$model[key] = new factories.Model(model, key, {});
+            tmp = model.$model[key] = new Model(model, key, {});
             model.$attributes[key] = tmp.$attributes;
             model = tmp;
         } else {
