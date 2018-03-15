@@ -1,5 +1,5 @@
 import * as util from '../../utils';
-import { isModel, isCollection } from '../adapter';
+import { isModel, isCollection } from '../mediator';
 import * as $filter from '../filter';
 import compileExpression from './compileExpression';
 

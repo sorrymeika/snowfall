@@ -2,7 +2,7 @@ import { isArray } from '../utils/is';
 import { identify } from '../utils/guid';
 import * as arrayUtils from '../utils/array';
 import { extend } from '../utils/clone';
-import { isModel, updateReference, updateViewNextTick, createModelFactory } from './adapter';
+import { isModel, updateReference, updateViewNextTick, createModelFactory } from './mediator';
 import { linkModels, unlinkModels } from './linker';
 
 import { mixinDataSet } from './DataSet';

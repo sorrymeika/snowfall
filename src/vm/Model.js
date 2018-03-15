@@ -11,7 +11,7 @@ import {
     updateModelByKeys,
     updateViewNextTick,
     createCollectionFactory
-} from './adapter';
+} from './mediator';
 import { linkModels, unlinkModels } from './linker';
 
 import { mixinDataSet } from './DataSet';

@@ -1,7 +1,7 @@
 import Model from './Model';
 import Collection from './Collection';
 import ViewModel from './ViewModel';
-import { initFactories, removeAttribute, findViewModel } from './adapter';
+import { initFactories, removeAttribute, findViewModel } from './mediator';
 
 initFactories(Model, Collection);
 

@@ -1,4 +1,4 @@
-import { updateViewNextTick } from "./adapter";
+import { updateViewNextTick } from "./mediator";
 
 const DESTROY = 'destroy';
 
@@ -17,7 +17,7 @@ function ModelLink(model, childModel, childModelKey) {
         .on(DESTROY, this.destroy, this);
 }
 
-ModelLink.prototype.cb = function (e) {
+ModelLink.prototype.cb = function () {
     updateViewNextTick(this.model);
 };
 

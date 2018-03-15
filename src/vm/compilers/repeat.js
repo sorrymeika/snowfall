@@ -1,6 +1,6 @@
 import { $, ELEMENT_NODE, COMMENT_NODE, cloneElement, closestElement, insertElementAfter } from '../../utils/dom';
 import compileExpression from './compileExpression';
-import { findModelByKey } from '../adapter';
+import { findModelByKey } from '../mediator';
 import { value as valueOfObject } from '../../utils/object';
 import { isNumber } from '../../utils/is';
 import Collection from '../Collection';
