@@ -20,6 +20,17 @@ export function cookie(a, b, c, p) {
 }
 
 export function store(key, value) {
+    if (typeof localStorage === 'undefined') {
+        window.localStorage = {
+            setItem(key, value) {
+                localStorage[key] = value + '';
+            },
+            getItem(key) {
+                return localStorage[key] || null;
+            }
+        };
+    }
+
     if (location.search && /(?:\?|&)STORE_ID=(\d+)/.test(location.search)) {
         key = RegExp.$1 + ")" + key;
     }
@@ -30,4 +41,14 @@ export function store(key, value) {
         localStorage.removeItem(key);
     else
         localStorage.setItem(key, JSON.stringify(value));
+}
+
+export function session(key, value) {
+    if (typeof sessionStorage === 'undefined') return store(key, value);
+    if (typeof value === 'undefined')
+        return JSON.parse(sessionStorage.getItem(key));
+    if (value === null)
+        sessionStorage.removeItem(key);
+    else
+        sessionStorage.setItem(key, JSON.stringify(value));
 }

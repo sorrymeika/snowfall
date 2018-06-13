@@ -48,11 +48,19 @@ export function params(args) {
         .join('&');
 }
 
-export function queryString(name) {
+export function queryString(search, name) {
+    if (name === undefined) {
+        name = search;
+        search = location.search;
+    }
     var reg = new RegExp("(^|&)" + name + "=([^&]*)(&|$)");
-    var r = location.search.substr(1).match(reg);
+    var r = search.substr(1).match(reg);
 
     return r ? unescape(r[2]) : null;
+}
+
+export function appendQueryString(url, args) {
+    return url + (url.indexOf('?') === -1 ? '?' : '&') + params(args);
 }
 
 export function encodeHTML(text) {

@@ -1,6 +1,6 @@
 var toString = Object.prototype.toString;
 
-export default function is(type) {
+function is(type) {
     return function (obj) {
         return toString.call(obj) == "[object " + type + "]";
     };
@@ -9,6 +9,10 @@ export default function is(type) {
 export const isObject = is("Object");
 
 export const isArray = Array.isArray || is("Array");
+
+export function isUndefined(val) {
+    return val === undefined;
+}
 
 export function isString(str) {
     return typeof str == 'string' || toString.call(str) == "[object String]";

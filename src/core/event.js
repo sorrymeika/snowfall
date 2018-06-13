@@ -1,71 +1,9 @@
-var slice = [].slice;
-var separator = /\s+/;
-var eventId = 0;
-
 function returnFalse() {
     return false;
 }
 
 function returnTrue() {
     return true;
-}
-
-function eachEvent(events, callback, iterator) {
-    (events || '').split(separator).forEach(function (type) {
-        iterator(type, callback);
-    });
-}
-
-function matcherFor(ns) {
-    return new RegExp('(?:^| )' + ns.replace(' ', ' .* ?') + '(?: |$)');
-}
-
-function parse(name) {
-    var parts = ('' + name).split('.');
-
-    return {
-        e: parts[0],
-        ns: parts.slice(1)
-            .sort()
-            .join(' ')
-    };
-}
-
-function findHandlers(arr, name, callback, context) {
-    var matcher,
-        obj;
-
-    obj = parse(name);
-    obj.ns && (matcher = matcherFor(obj.ns));
-    return arr.filter(function (handler) {
-        return handler &&
-            (!obj.e || handler.e === obj.e) &&
-            (!obj.ns || matcher.test(handler.ns)) &&
-            (!callback || handler.cb === callback ||
-                handler.cb._cb === callback) &&
-            (!context || handler.ctx === context);
-    });
-}
-
-function removeHandlers(arr, name, callback, context) {
-    var matcher,
-        handler,
-        obj,
-        result = [];
-
-    obj = parse(name);
-    obj.ns && (matcher = matcherFor(obj.ns));
-    for (var i = arr.length; i >= 0; i--) {
-        if ((handler = arr[i]) && !(
-            (!obj.e || handler.e === obj.e) &&
-            (!obj.ns || matcher.test(handler.ns)) &&
-            (!callback || handler.cb === callback ||
-                handler.cb._cb === callback) &&
-            (!context || handler.ctx === context))) {
-            result.push(handler);
-        }
-    }
-    return result;
 }
 
 export function Event(type, props) {
@@ -76,7 +14,6 @@ export function Event(type, props) {
 }
 
 Event.prototype = {
-
     isDefaultPrevented: returnFalse,
 
     isPropagationStopped: returnFalse,
@@ -90,140 +27,140 @@ Event.prototype = {
     }
 };
 
-var event = {
+const EventEmitterProto = {
+    on(names, callback) {
+        if (!callback || !names) return;
 
-    on: function (name, callback, context) {
-        var me = this,
-            set;
+        var events = this._events || (this._events = {});
 
-        if (!callback) {
-            return this;
-        }
-
-        set = this._events || (this._events = []);
-
-        eachEvent(name, callback, function (name, callback) {
-            var handler = parse(name);
-
-            handler.cb = callback;
-            handler.ctx = context;
-            handler.ctx2 = context || me;
-            handler.id = eventId++;
-            set.push(handler);
+        names.split(/\s+/).forEach((name) => {
+            if (name) {
+                var type = name.toLowerCase();
+                var fns = events[type] || (events[type] = []);
+                fns.push(callback);
+            }
         });
+        return this;
+    },
+
+    onceTrue(name, callback) {
+        if (!callback) return this;
+
+        var self = this;
+        function once() {
+            var res = callback.apply(self, arguments);
+            if (res === true)
+                self.off(name, once);
+            return res;
+        };
+
+        return this.on(name, once);
+    },
+
+    one(name, callback) {
+        if (!callback) return this;
+
+        var self = this;
+        function once() {
+            self.off(name, once);
+            return callback.apply(self, arguments);
+        };
+
+        return this.on(name, once);
+    },
+
+    off(names, callback) {
+        if (!this._events) return this;
+
+        if (!names) {
+            this._events = null;
+        } else if (!callback) {
+            names.split(/\s+/).forEach((name) => {
+                if (name) {
+                    delete this._events[name.toLowerCase()];
+                }
+            });
+        } else {
+            names.split(/\s+/).forEach((name) => {
+                if (name) {
+                    var fns = this._events[name.toLowerCase()];
+                    if (fns) {
+                        for (var i = fns.length; i >= 0; i--) {
+                            if (fns[i] === callback) {
+                                fns.splice(i, 1);
+                                break;
+                            }
+                        }
+                    }
+                }
+            });
+        }
 
         return this;
     },
 
-    onceTrue: function (name, callback, context) {
-        var me = this;
+    trigger(e, ...args) {
+        if (!this._events || !e) return this;
 
-        if (!callback) {
-            return this;
-        }
+        typeof e === 'string' && (e = new Event(e));
 
-        eachEvent(name, callback, function (name, callback) {
-            var once = function () {
-                var res = callback.apply(context || me, arguments);
-
-                if (res === true)
-                    me.off(name, once);
-
-                return res;
-            };
-
-            once._cb = callback;
-            me.on(name, once, context);
-        });
-
-        return this;
-    },
-
-    one: function (name, callback, context) {
-        var me = this;
-
-        if (!callback) {
-            return this;
-        }
-
-        eachEvent(name, callback, function (name, callback) {
-            var once = function () {
-                me.off(name, once);
-                return callback.apply(context || me, arguments);
-            };
-
-            once._cb = callback;
-            me.on(name, once, context);
-        });
-
-        return this;
-    },
-
-    off: function (name, callback, context) {
+        var fns;
         var events = this._events;
+        var name = e.type.toLowerCase();
+        var dotIndex;
+        var len;
 
-        if (!events) {
-            return this;
+        while ((dotIndex = name.lastIndexOf('.')) != -1) {
+            events[name] && (fns = (fns || []).concat(events[name]));
+            name = name.slice(0, dotIndex);
         }
+        events[name] && (fns = (fns || []).concat(events[name]));
 
-        if (!name && !callback && !context) {
-            this._events = [];
-            return this;
-        }
+        if (fns && (len = fns.length)) {
+            var i = -1;
+            var stoped;
 
-        eachEvent(name, callback, (name, callback) => {
-            this._events = removeHandlers(events, name, callback, context);
-        });
+            if (!e.target) e.target = this;
 
-        return this;
-    },
+            e.args = args;
+            args.unshift(e);
 
-    trigger: function (evt) {
-        var i = -1,
-            args,
-            events,
-            stoped,
-            len,
-            ev;
-
-        if (!this._events || !evt) {
-            return this;
-        }
-
-        typeof evt === 'string' && (evt = new Event(evt));
-
-        args = slice.call(arguments, 1);
-        evt.args = args;
-        args.unshift(evt);
-
-        events = findHandlers(this._events, evt.type);
-        if (events) {
-            len = events.length;
             while (++i < len) {
-                if ((stoped = evt.isPropagationStopped()) || false ===
-                    (ev = events[i]).cb.apply(ev.ctx2, args)
-                ) {
+                if ((stoped = e.isPropagationStopped()) || false === fns[i].apply(this, args)) {
                     if (!stoped) {
-                        evt.stopPropagation();
-                        evt.preventDefault();
+                        e.stopPropagation();
+                        e.preventDefault();
                     }
                     break;
                 }
             }
         }
-
         return this;
     }
 };
 
+export function EventEmitter() {
+}
+EventEmitter.prototype = EventEmitterProto;
+
 export function mixin(fn, ext) {
-    Object.assign(typeof fn == 'function' ? fn.prototype : fn, event, ext);
+    Object.assign(typeof fn == 'function' ? fn.prototype : fn, EventEmitterProto, ext);
     return fn;
 }
 
-export function EventEmitter() {
-}
-EventEmitter.prototype = event;
-
 export default Event;
 
+// var event = new EventEmitter();
+
+// var fn = () => console.log(1);
+// event.on('asdf asdf2', fn);
+// event.trigger('asdf.bbb');
+// event.off('asdf', fn);
+
+// event.onceTrue('asdf', () => {
+//     console.log('onceTrue');
+//     return true;
+// });
+// event.trigger('asdf.bbb');
+
+// console.log(event);

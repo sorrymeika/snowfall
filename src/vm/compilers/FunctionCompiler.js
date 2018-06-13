@@ -1,5 +1,5 @@
 import * as util from '../../utils';
-import { isModel, isCollection } from '../mediator';
+import { isObservable } from '../predicates';
 import * as $filter from '../filter';
 import compileExpression from './compileExpression';
 
@@ -51,16 +51,14 @@ export default class FunctionCompiler {
             srcElement: element,
             util: util,
             $filter: $filter
-        }, this.viewModel.$attributes);
+        }, this.viewModel.$data);
 
         if (snData) {
             for (var key in snData) {
                 var val = snData[key];
-                data[key] = isModel(val)
-                    ? val.$attributes
-                    : isCollection(val)
-                        ? val.$array
-                        : val;
+                data[key] = isObservable(val)
+                    ? val.$data
+                    : val;
             }
         }
 

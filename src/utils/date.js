@@ -8,8 +8,17 @@ import { pad } from "./format";
  * @param {number} timestamp
  */
 export function timeLeft(timestamp, type = "D") {
+    const { days, hours, minutes, seconds } = splitTime(timestamp, type);
+    return (!days ? '' : (days + '天 ')) +
+        pad(hours) + ":" +
+        pad(minutes) + ":" +
+        pad(seconds);
+}
+
+export function splitTime(timestamp, type = "D") {
+    var days = 0;
     if (type == 'D') {
-        var days = Math.floor(timestamp / (1000 * 60 * 60 * 24));
+        days = Math.floor(timestamp / (1000 * 60 * 60 * 24));
         timestamp %= (1000 * 60 * 60 * 24);
     }
 
@@ -22,10 +31,7 @@ export function timeLeft(timestamp, type = "D") {
     var seconds = Math.floor(timestamp / 1000);
     timestamp %= (1000);
 
-    return (!days ? '' : (days + '天 ')) +
-        pad(hours) + ":" +
-        pad(minutes) + ":" +
-        pad(seconds);
+    return { days, hours, minutes, seconds };
 }
 
 /**

@@ -1,54 +1,29 @@
-import { isArray } from '../utils/is';
+import { isArray, isString, isFunction } from '../utils/is';
 import { identify } from '../utils/guid';
 import * as arrayUtils from '../utils/array';
 import { extend } from '../utils/clone';
-import { isModel, updateReference, updateViewNextTick, createModelFactory } from './mediator';
-import { linkModels, unlinkModels } from './linker';
+import { linkObservers, unlinkObservers } from './linker';
 
-import { mixinDataSet } from './DataSet';
+import { Observer } from './Observer';
+import { Model } from './Model';
+import { enqueueUpdate } from './methods/enqueueUpdate';
+import { updateRefs } from './methods/updateRefs';
+import { isModel, isObservable } from './predicates';
+import { contains } from '../utils/object';
 
 var RE_COLL_QUERY = /\[((?:'(?:\\'|[^'])*'|"(?:\\"|[^"])*"|[^\]])+)\](?:\[([\+\-]?)(\d+)?\])?(?:\.(.*))?/;
 
 var COLLECTION_UPDATE_ONLY_EXISTS = 2;
 var COLLECTION_UPDATE_TO = 3;
 
-function collectionWillUpdate(collection) {
-    if (!collection._isSetting) {
-        collection._isSetting = 1;
-        collection._isChange = false;
-        collection.__arrayBackup = collection.$array;
-        collection.$array = collection.$array.slice();
-    } else {
-        collection._isSetting++;
+export class Collection extends Observer {
+    static itemFactory(parent, index, data) {
+        return new Model(parent, index, data);
     }
-}
-
-function collectionDidUpdate(collection) {
-    if (collection._isSetting && --collection._isSetting == 0) {
-        if (collection._isChange) {
-            updateReference(updateViewNextTick(collection));
-
-            if (process.env.NODE_ENV === 'development') {
-                Object.freeze(collection.$array);
-            }
-        } else if (collection.__arrayBackup) {
-            collection.$array = collection.__arrayBackup;
-        }
-        collection._isSetting = false;
-        collection.__arrayBackup = null;
-    }
-    return collection;
-}
-
-function createChild(collection, name, child) {
-    const ChildFactory = collection.constructor.createChildFactory(name, child);
-    return new ChildFactory(collection, name, child);
-}
-
-export default class Collection {
-    static createChildFactory = createModelFactory;
 
     constructor(parent, attributeName, array) {
+        super();
+
         var parentKey;
 
         if (isArray(parent)) {
@@ -60,7 +35,6 @@ export default class Collection {
 
         this.cid = identify();
         this.$array = [];
-        this.render = this.render.bind(this);
 
         if (!parent) {
             this.root = this;
@@ -68,7 +42,7 @@ export default class Collection {
             this.parent = parent;
             this.root = parent.root;
             parentKey = parent.key;
-            parent.$attributes[attributeName] = this.$array;
+            parent.$data[attributeName] = this.$array;
         }
 
         this.key = parentKey ? (parentKey + "." + attributeName) : attributeName;
@@ -77,6 +51,10 @@ export default class Collection {
         this.changed = false;
 
         if (array && array.length) this.add(array);
+    }
+
+    get $data() {
+        return this.$array;
     }
 
     get array() {
@@ -204,13 +182,15 @@ export default class Collection {
     }
 
     indexOf(key, val) {
-        return isModel(key) ? Array.prototype.indexOf.call(this, key) :
-            arrayUtils.indexOf(this.$array, key, val);
+        return isModel(key)
+            ? Array.prototype.indexOf.call(this, key)
+            : arrayUtils.indexOf(this.$array, key, val);
     }
 
     lastIndexOf(key, val) {
-        return isModel(key) ? Array.prototype.lastIndexOf.call(this, key) :
-            arrayUtils.lastIndexOf(this.$array, key, val);
+        return isModel(key)
+            ? Array.prototype.lastIndexOf.call(this, key)
+            : arrayUtils.lastIndexOf(this.$array, key, val);
     }
 
     getOrCreate(obj) {
@@ -246,11 +226,11 @@ export default class Collection {
                 if (isModel(item)) {
                     if (item != model) {
                         isChange = true;
-                        unlinkModels(this, model);
-                        linkModels(this, item, this.key + '^child');
+                        unlinkObservers(this, model);
+                        linkObservers(this, item, this.key + '^child');
 
                         this[i] = item;
-                        this.$array[i] = item.$attributes;
+                        this.$array[i] = item.$data;
                     }
                 } else {
                     model.set(true, item);
@@ -288,14 +268,14 @@ export default class Collection {
                 var dataItem = array[i];
 
                 if (isModel(dataItem)) {
-                    linkModels(this, dataItem, this.key + '^child');
+                    linkObservers(this, dataItem, this.key + '^child');
                     model = dataItem;
                 } else {
-                    model = createChild(this, this.length, dataItem);
+                    model = itemFactory(this, this.length, dataItem);
                 }
 
                 this[this.length++] = model;
-                this.$array.push(model.$attributes);
+                this.$array.push(model.$data);
 
                 results.push(model);
             }
@@ -332,18 +312,38 @@ export default class Collection {
     }
 
     /**
+     * 更新collection中的所有item
+     * collection.updateAll({ name: '更新掉name' })
+     * 
+     * @param {Object} data
+     * 
+     * @return {Collection} self
+     */
+    updateAll(data) {
+        collectionWillUpdate(this);
+        var array = this.$array;
+        for (var i = 0; i < array.length; i++) {
+            this[i].set(data);
+            if (this[i]._isChange) {
+                this._isChange = true;
+            }
+        }
+        return collectionDidUpdate(this);
+    }
+
+    /**
      * 更新 collection 中的 model
      * 
-     * @param {Array} arr 需要更新的数组
+     * @param {Array|Object} arr 需要更新的数组
      * @param {String|Function} primaryKey 唯一健 或 (a, b)=>boolean
      * @param {number} [updateType] 更新类型
-     * undefined|0 - collection中存在既增量更新，不存在既添加
+     * 默认 - collection中存在既增量更新，不存在既添加
      * COLLECTION_UPDATE_TO - 根据arr更新，不在arr中的项将被删除
      * COLLECTION_UPDATE_ONLY_EXISTS - 只更新collection中存在的
      * 
      * @return {Collection} self
      */
-    update(arr, primaryKey, updateType) {
+    update(arr, primaryKey, updateType?) {
         if (!arr) return this;
 
         var fn;
@@ -442,14 +442,14 @@ export default class Collection {
 
             if (isModel(dataItem)) {
                 model = dataItem;
-                linkModels(this, model, this.key + '^child');
+                linkObservers(this, model, this.key + '^child');
             } else {
                 count = index + i;
-                model = createChild(this, count, dataItem);
+                model = itemFactory(this, count, dataItem);
             }
 
             Array.prototype.splice.call(this, count, 0, model);
-            this.$array.splice(count, 0, model.$attributes);
+            this.$array.splice(count, 0, model.$data);
         }
         this._isChange = true;
 
@@ -461,17 +461,11 @@ export default class Collection {
 
         if (!count) count = 1;
 
-        var root = this.root;
         var spliced = Array.prototype.splice.call(this, start, count);
         this.$array.splice(start, count);
         this._isChange = true;
 
-        if (root._linkedModels) {
-            var self = this;
-            spliced.forEach(function (model) {
-                model._linkedParents && unlinkModels(self, model);
-            });
-        }
+        this._desposeItems(spliced);
 
         data && this.insert(start, data);
 
@@ -483,32 +477,44 @@ export default class Collection {
     /**
      * 移除Model
      * 
-     * @param {String|Model|Function} key 删除条件，(arrayItem)=>boolean
-     * @param {any} val
+     * @param {String|Model|Function|array} key 删除条件，(arrayItem)=>boolean
+     * @param {any} [val]
      */
     remove(key, val) {
         collectionWillUpdate(this);
 
         var array = this.$array;
-        var fn = typeof key === 'function'
-            ? key
-            : isModel(key)
-                ? function (item, i) {
-                    return this[i] === key;
-                }
-                : (item) => {
-                    return item[key] == val;
-                };
+        var fn = isArray(key)
+            ? (item, i) => key.indexOf(this[i]) !== -1
+            : isObservable(key)
+                ? (item, i) => this[i] === key
+                : matcher(key, val);
+        var removed = [];
 
         for (var i = this.length - 1; i >= 0; i--) {
             if (fn.call(this, array[i], i)) {
+                removed.push(this[i]);
                 Array.prototype.splice.call(this, i, 1);
                 array.splice(i, 1);
                 this._isChange = true;
             }
         }
 
+        this._desposeItems(removed);
+
         return collectionDidUpdate(this);
+    }
+
+    /**
+     * 解除items与collection的link关系
+     * @param {array} items 
+     */
+    _desposeItems(items) {
+        if (this.root._linkedModels) {
+            items.forEach((model) => {
+                model._linkedParents && unlinkObservers(this, model);
+            });
+        }
     }
 
     clear() {
@@ -540,24 +546,33 @@ export default class Collection {
         return this;
     }
 
-    find(key, val) {
-        var i = 0;
-        var n = this.$array.length;
+    forEach(fn) {
+        this.$array.forEach(fn, this);
+    }
 
-        if (typeof key === 'function') {
-            for (; i < n; i++) {
-                if (key.call(this, this.$array[i], i)) return this[i];
-            }
-        } else {
-            for (; i < n; i++) {
-                if (this.$array[i][key] == val) return this[i];
-            }
+    find(key, val) {
+        var iterate = matcher(key, val);
+        var array = this.$array;
+        var length = array.length;
+
+        for (var i = 0; i < length; i++) {
+            if (iterate(array[i], i)) return this[i];
         }
         return null;
     }
 
     filter(key, val) {
-        return arrayUtils.filter(this.$array, key, val);
+        var iterate = matcher(key, val);
+        var result = [];
+        var array = this.$array;
+        var length = array.length;
+
+        for (var i = 0; i < length; i++) {
+            if (iterate(array[i], i))
+                result.push(this[i]);
+        }
+
+        return result;
     }
 
     last() {
@@ -575,12 +590,12 @@ export default class Collection {
             this[i].$i = i;
         }
         Array.prototype.sort.call(this, function (a, b) {
-            return fn(a.$attributes, b.$attributes, a.$i, b.$i);
+            return fn(a.$data, b.$data, a.$i, b.$i);
         });
 
         for (i = 0; i < n; i++) {
-            if (this.$array[i] != this[i].$attributes) {
-                this.$array[i] = this[i].$attributes;
+            if (this.$array[i] != this[i].$data) {
+                this.$array[i] = this[i].$data;
                 this._isChange = true;
             }
         }
@@ -595,4 +610,43 @@ export default class Collection {
 
 Collection.prototype.toArray = Collection.prototype.toJSON;
 
-mixinDataSet(Collection);
+function matcher(key, val) {
+    return isString(key)
+        ? (item, i) => item[key] === val
+        : isFunction(key)
+            ? key
+            : (item) => contains(item, key);
+}
+
+function itemFactory(collection, index, child) {
+    return collection.constructor.itemFactory(collection, index, child);
+}
+
+function collectionWillUpdate(collection) {
+    if (!collection._isSetting) {
+        collection._isSetting = 1;
+        collection._isChange = false;
+        collection.__arrayBackup = collection.$array;
+        collection.$array = collection.$array.slice();
+    } else {
+        collection._isSetting++;
+    }
+}
+
+function collectionDidUpdate(collection) {
+    if (collection._isSetting && --collection._isSetting == 0) {
+        if (collection._isChange) {
+            enqueueUpdate(collection);
+            updateRefs(collection);
+
+            if (process.env.NODE_ENV === 'development') {
+                Object.freeze(collection.$array);
+            }
+        } else if (collection.__arrayBackup) {
+            collection.$array = collection.__arrayBackup;
+        }
+        collection._isSetting = false;
+        collection.__arrayBackup = null;
+    }
+    return collection;
+}

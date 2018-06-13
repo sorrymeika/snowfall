@@ -39,10 +39,10 @@ export class TemplateCompiler {
         var nodeType = node.nodeType;
 
         if (nodeType == TEXT_NODE) {
-            fid = this.functionCompiler.push(node.textContent);
+            fid = this.functionCompiler.push(node.nodeValue);
             if (fid) {
-                node.snAttributes = ['textContent', fid];
-                node.textContent = '';
+                node.snAttributes = ['nodeValue', fid];
+                node.nodeValue = '';
             }
             return;
         } else if (nodeType == ELEMENT_NODE) {
@@ -110,11 +110,12 @@ export class TemplateCompiler {
             snValues[i / 2] = val;
 
             switch (attrName) {
-                case 'textContent':
+                case 'nodeValue':
                     updateTextNode(el, val);
                     break;
                 case 'value':
-                    if (el.tagName === 'INPUT' || el.tagName === 'SELECT' || el.tagName === 'TEXTAREA') {
+                    var nodeName = el.nodeName;
+                    if (nodeName === 'INPUT' || nodeName === 'SELECT' || nodeName === 'TEXTAREA') {
                         if (el.value != val || (el.value === '' && val === 0)) {
                             el.value = val;
                         }
@@ -214,7 +215,7 @@ function updateTextNode(el, val) {
                     item.nodeType || (
                         (!nextSibling ||
                             nextSibling.nodeType !== TEXT_NODE ||
-                            nextSibling.textContent !== "" + item) &&
+                            nextSibling.nodeValue !== "" + item) &&
                         (item = document.createTextNode(item))
                     )
                 ) {
@@ -233,10 +234,10 @@ function updateTextNode(el, val) {
             newTails.push(item);
         });
 
-        el.textContent = '';
+        el.nodeValue = '';
         el.snTails = newTails;
     } else {
-        el.textContent = val;
+        el.nodeValue = val;
         el.snTails = null;
     }
     if (removableTails) {

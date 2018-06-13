@@ -1,8 +1,8 @@
 import { $, ELEMENT_NODE, COMMENT_NODE, cloneElement, closestElement, insertElementAfter } from '../../utils/dom';
-import compileExpression from './compileExpression';
-import { findModelByKey } from '../mediator';
 import { value as valueOfObject } from '../../utils/object';
 import { isNumber } from '../../utils/is';
+import compileExpression from './compileExpression';
+import { findChildModel } from '../methods/findChildModel';
 import Collection from '../Collection';
 import NodeUpdateResult from './NodeUpdateResult';
 
@@ -83,7 +83,7 @@ function updateRepeatView(template, nodeData) {
         if (repeatCompiler.isFn) {
             collection = new Collection(viewModel, repeatCompiler.collectionKey, collectionData);
         } else {
-            collection = model && findModelByKey(model, repeatCompiler.collectionKey);
+            collection = model && findChildModel(model, repeatCompiler.collectionKey);
         }
 
         if (!collection) return;
@@ -151,7 +151,7 @@ function updateRepeatView(template, nodeData) {
                 sortFn = valueOfObject(viewModel.delegate, orderBy);
                 break;
             case ORDER_BY_ATTRIBUTES_FUNCTION:
-                sortFn = valueOfObject(viewModel.$attributes, orderBy);
+                sortFn = valueOfObject(viewModel.$data, orderBy);
                 break;
             default:
                 // orderBy=['a',true,someFunctionId,false]
@@ -188,7 +188,7 @@ function updateRepeatView(template, nodeData) {
                 };
         }
         sortFn && list.sort(function (a, b) {
-            return sortFn(a.model.$attributes, b.model.$attributes);
+            return sortFn(a.model.$data, b.model.$data);
         });
     }
 

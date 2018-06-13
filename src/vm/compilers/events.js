@@ -63,7 +63,7 @@ export function bindEvents(viewModel, $element) {
         switch (e.type) {
             case 'change':
             case 'blur':
-                switch (target.tagName) {
+                switch (target.nodeName) {
                     case 'TEXTAREA':
                         return;
                     case 'INPUT':

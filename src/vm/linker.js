@@ -1,8 +1,8 @@
-import { updateViewNextTick } from "./mediator";
+import { enqueueUpdate } from "./methods/enqueueUpdate";
 
 const DESTROY = 'destroy';
 
-function ModelLink(model, childModel, childModelKey) {
+function ObserverLink(model, childModel, childModelKey) {
     var root = model.root;
     var childRoot = childModel.root;
 
@@ -11,36 +11,39 @@ function ModelLink(model, childModel, childModelKey) {
     this.childRoot = childModel.root;
     this.model = model;
 
-    root.on(DESTROY, this.destroy, this);
+    this.destroy = this.destroy.bind(this);
+    this.cb = this.cb.bind(this);
+
+    root.on(DESTROY, this.destroy);
     childRoot
-        .on("linkchange:" + this.childModel.cid, this.cb, this)
-        .on(DESTROY, this.destroy, this);
+        .on("linkchange:" + this.childModel.cid, this.cb)
+        .on(DESTROY, this.destroy);
 }
 
-ModelLink.prototype.cb = function () {
-    updateViewNextTick(this.model);
+ObserverLink.prototype.cb = function () {
+    enqueueUpdate(this.model);
 };
 
-ModelLink.prototype.destroy = function () {
-    unlinkModels(this.model, this.childModel);
+ObserverLink.prototype.destroy = function () {
+    unlinkObservers(this.model, this.childModel);
     this.close();
 };
 
-ModelLink.prototype.close = function () {
+ObserverLink.prototype.close = function () {
     this.model.root.off(DESTROY, this.destroy);
     this.childRoot
         .off(DESTROY, this.destroy)
         .off("linkchange:" + this.childModel.cid, this.cb);
 };
 
-export function linkModels(model, child, key) {
-    var link = new ModelLink(model, child, key);
+export function linkObservers(model, child, key) {
+    var link = new ObserverLink(model, child, key);
 
     (child._linkedParents || (child._linkedParents = [])).push(link);
     (model.root._linkedModels || (model.root._linkedModels = [])).push(link);
 }
 
-export function unlinkModels(model, child) {
+export function unlinkObservers(model, child) {
     var root = model.root;
     var link;
     var linkedModels = root._linkedModels;

@@ -1,4 +1,6 @@
-import { mixin as mixinEvent, Event } from '../core/event';
+import { mixin as eventMixin, Event } from '../core/event';
+import { enqueueUpdate } from './methods/enqueueUpdate';
+import { updateRefs } from './methods/updateRefs';
 
 var nextTask;
 var taskId;
@@ -35,16 +37,41 @@ function nextTick(cb) {
     return taskId;
 }
 
-const DataSet = {
+export class Observer {
+    constructor(data) {
+        if (data !== undefined) {
+            this.set(data);
+        }
+        this.root = this;
+        this.render = this.render.bind(this);
+    }
+
+    get() {
+        return this.$data;
+    }
+
+    set(data) {
+        if (this.$data !== data) {
+            this.$data = data;
+            enqueueUpdate(this);
+            updateRefs(this);
+        }
+    }
+
     /**
      * 监听子 Model / Collection 变化
      */
     observe(key, fn) {
         if (typeof key === 'function') {
             fn = key;
-            key = this.key || '';
+            key = this.key ? ':' + this.key : '';
+        } else if (!fn) {
+            return Object.assign((cb) => this.observe(key, cb), {
+                context: this,
+                attribute: key
+            });
         } else {
-            key = ':' + (this.key ? this.key + '.' + key : key);
+            key = parseEventName(this.key, key);
         }
 
         var self = this;
@@ -56,29 +83,37 @@ const DataSet = {
         cb._cb = fn;
 
         return this.root.on('datachanged' + key, cb);
-    },
+    }
 
     unobserve(key, fn) {
         if (typeof key === 'function') {
             fn = key;
-            key = this.key || '';
+            key = this.key ? ':' + this.key : '';
         } else {
-            key = ':' + (this.key ? this.key + '.' + key : key);
+            key = parseEventName(this.key, key);
         }
 
         return this.root.off('datachanged' + key, fn);
-    },
+    }
+
+    contains(model) {
+        if (model === this) return false;
+        for (var parent = model.parent; parent; parent = parent.parent) {
+            if (parent === this) return true;
+        }
+        return false;
+    }
 
     nextTick(cb) {
         this._nextTick ? this.one('datachanged', cb) : cb.call(this);
         return this;
-    },
+    }
 
     renderNextTick() {
         if (!this._nextTick) {
             this._nextTick = this._rendering ? 1 : (this.taskId = nextTick(this.render));
         }
-    },
+    }
 
     render() {
         this._rendering = true;
@@ -93,16 +128,20 @@ const DataSet = {
             count++;
         }
         this._rendering = false;
-    },
+    }
 
     destroy() {
         this.trigger('destroy')
             .off();
     }
-};
-
-mixinEvent(DataSet);
-
-export function mixinDataSet(Model) {
-    Object.assign(Model.prototype, DataSet);
 }
+
+function parseEventName(selfKey, attrs) {
+    return attrs
+        .split(/\s+/)
+        .filter(name => !!name)
+        .map(name => ':' + (selfKey ? selfKey + '.' + name : name))
+        .join(' datachanged');
+}
+
+eventMixin(Observer);

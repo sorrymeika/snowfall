@@ -65,7 +65,7 @@ export class ComponentCompiler {
             var node = el.firstChild;
 
             while (node) {
-                if (node.nodeType !== TEXT_NODE || !/^\s*$/.test(node.textContent)) {
+                if (node.nodeType !== TEXT_NODE || !/^\s*$/.test(node.nodeValue)) {
                     children.push(node);
                     node.snViewModel = viewModel;
                     viewModel.$el.push(node);

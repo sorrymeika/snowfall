@@ -5,8 +5,7 @@ import { unbindEvents, bindEvents } from './compilers/events';
 import { TemplateCompiler } from './compilers/template';
 
 import { Event } from '../core/event';
-
-import Model from './Model';
+import { Model } from './Model';
 
 function compileNewTemplate(viewModel, template) {
     var $element = $(template);
@@ -52,9 +51,7 @@ function findOwnNode(viewModel, node) {
     return node;
 }
 
-export { Model };
-
-export default class ViewModel extends Model {
+export class ViewModel extends Model {
 
     /**
      * 双向绑定model
@@ -88,7 +85,7 @@ export default class ViewModel extends Model {
         props.el && (this.el = props.el);
         this.el && this.template(this.el);
 
-        this.initialize && this.initialize(this.$attributes);
+        this.initialize && this.initialize(this.$data);
     }
 
     template(el) {
@@ -110,7 +107,7 @@ export default class ViewModel extends Model {
     }
 
     parents() {
-        return this.$el && this.$el.parents();
+        return this.$el ? this.$el.parents() : $();
     }
 
     $(selector) {
