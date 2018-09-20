@@ -31,10 +31,6 @@ export function store(key, value) {
         };
     }
 
-    if (location.search && /(?:\?|&)STORE_ID=(\d+)/.test(location.search)) {
-        key = RegExp.$1 + ")" + key;
-    }
-
     if (typeof value === 'undefined')
         return JSON.parse(localStorage.getItem(key));
     if (value === null)

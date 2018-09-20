@@ -1,4 +1,5 @@
-import { isArray } from './is';
+import { isArray, isString } from './is';
+import { castPath } from './castPath';
 
 var hasOwnProperty = Object.prototype.hasOwnProperty;
 var ArrayProto = Array.prototype;
@@ -35,6 +36,68 @@ export function createClass(proto) {
     func.prototype.constructor = func;
     func.extend = classExtend;
     return func;
+}
+
+export function mixin(...mixins) {
+    class Mix {
+        constructor(...args) {
+            this.initialize && this.initialize(...args);
+
+            let i = -1;
+            let newMixin;
+
+            while (++i < mixins.length) {
+                newMixin = new mixins[i](...args);
+
+                copyProperties(this, newMixin);
+                copyProperties(this.prototype, newMixin.prototype);
+            }
+        }
+    }
+
+    let i = -1;
+    let item;
+
+    while (++i < mixins.length) {
+        item = mixins[i];
+        copyProperties(Mix, item);
+        copyProperties(Mix.prototype, item.prototype);
+    }
+
+    return Mix;
+}
+
+function copyProperties(target = {}, source = {}) {
+    const ownPropertyNames = Object.getOwnPropertyNames(source);
+
+    ownPropertyNames
+        .filter(key => !/^(prototype|name|constructor)$/.test(key))
+        .forEach(key => {
+            const desc = Object.getOwnPropertyDescriptor(source, key);
+
+            Object.defineProperty(target, key, desc);
+        });
+}
+
+class MixinBuilder {
+
+    constructor(superclass) {
+        this.superclass = superclass || class { };
+    }
+
+    /**
+     * Applies `mixins` in order to the superclass given to `mix()`.
+     *
+     * @param {Array.<Mixin>} mixins
+     * @return {Function} a subclass of `superclass` with `mixins` applied
+     */
+    with(...mixins) {
+        return mixins.reduce((c, m) => m(c), this.superclass);
+    }
+}
+
+export function mix(superclass) {
+    return new MixinBuilder(superclass);
 }
 
 /**
@@ -90,7 +153,7 @@ export function shallowEqual(objA: mixed, objB: mixed): boolean {
 
 /**
  * 判断两个 Object/Array 是否相等
- * 
+ *
  * @param {any} a
  * @param {any} b
  * @param {boolean} [eqeqeq] 是否全等`===`
@@ -149,9 +212,9 @@ export function same(a, b) {
 
 /**
  * 判断一个`Object`和另外一个`Object`是否`keys`重合且值相等
- * 
- * @param {Object|Array} parent 
- * @param {Object|any} obj 
+ *
+ * @param {Object|Array} parent
+ * @param {Object|any} obj
  */
 export function contains(parent, obj) {
     var type = toString.call(parent);
@@ -175,18 +238,34 @@ export function contains(parent, obj) {
     return true;
 }
 
-export function value(data, names) {
-    if (typeof names === 'string')
-        names = names.split('.');
+export function get(data, path) {
+    if (isString(path)) {
+        path = castPath(path);
+    }
 
-    for (var i = 0, len = names.length; i < len; i++) {
-        if (data == null || data == undefined) return null;
-        data = data[names[i]];
+    for (var i = 0, len = path.length; i < len; i++) {
+        if (data == null)
+            return undefined;
+        data = data[path[i]];
     }
 
     return data;
 }
 
+// Note: this method is deprecated
+export { get as value };
+
+export function at(data, paths) {
+    let index = -1;
+    const length = paths.length;
+    const result = new Array(length);
+    const skip = data == null;
+
+    while (++index < length) {
+        result[index] = skip ? undefined : get(data, paths[index]);
+    }
+    return result;
+}
 
 /**
  * pick Object

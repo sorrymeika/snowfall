@@ -48,19 +48,67 @@ export function params(args) {
         .join('&');
 }
 
+export function hashQs(url, append?) {
+    var indexOfHash = url.indexOf('#');
+    var hash;
+    if (indexOfHash === -1) {
+        hash = "";
+    } else {
+        hash = url.slice(indexOfHash + 1);
+        url = url.slice(0, indexOfHash);
+    }
+    return append ? url + '#' + qs(hash, append) : qs(hash);
+}
+
+export function qs(url, append?) {
+    !url && (url = '');
+
+    var indexOfHash = url.indexOf('#');
+    var hash;
+    if (indexOfHash === -1) {
+        hash = '';
+    } else {
+        hash = url.slice(indexOfHash);
+        url = url.slice(0, indexOfHash);
+    }
+
+    var indexOfQuery = url.lastIndexOf('?');
+    var path = indexOfQuery === -1 ? url : url.slice(0, indexOfQuery);
+    var search = indexOfQuery === -1 ? '' : url.slice(indexOfQuery);
+    if (indexOfQuery === -1) {
+        path = url;
+        search = '';
+    } else {
+        path = url.slice(0, indexOfQuery);
+        search = url.slice(indexOfQuery);
+    }
+
+    const query = {};
+    search && search.replace(/(?:\?|^|&)([^=&]+)=([^&#=?]*)/g, function (match, name, val) {
+        query[decodeURIComponent(name)] = decodeURIComponent(val);
+        return '';
+    });
+
+    if (!append) {
+        return query;
+    }
+
+    return appendQueryString(path, Object.assign(query, append)) + hash;
+}
+
+export function appendQueryString(url, args) {
+    return url + (url.indexOf('?') === -1 ? '?' : '&') + params(args);
+}
+
 export function queryString(search, name) {
     if (name === undefined) {
         name = search;
         search = location.search;
     }
-    var reg = new RegExp("(^|&)" + name + "=([^&]*)(&|$)");
+    var reg = new RegExp("(^|&)" + name + "=([^&#=?]*)(&|$)");
     var r = search.substr(1).match(reg);
 
-    return r ? unescape(r[2]) : null;
-}
-
-export function appendQueryString(url, args) {
-    return url + (url.indexOf('?') === -1 ? '?' : '&') + params(args);
+    return r ? decodeURIComponent(r[2]) : null;
 }
 
 export function encodeHTML(text) {

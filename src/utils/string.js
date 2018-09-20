@@ -1,5 +1,5 @@
 export function camelCase(str) {
-    return str.replace(/-+(.)?/g, function(match, chr) {
+    return str.replace(/-+(.)?/g, function (match, chr) {
         return chr ? chr.toUpperCase() : '';
     });
 }
@@ -73,9 +73,9 @@ export function hasEmoji(str) {
     return false;
 }
 
-//下面是64个基本的编码
+// 下面是64个基本的编码
 var base64EncodeChars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
-//编码的方法
+// 编码的方法
 export function base64(str) {
     if (typeof str !== 'string') str += '';
     var out, i, len;

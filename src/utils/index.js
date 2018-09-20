@@ -7,7 +7,7 @@ export * from './format';
 export * from './guid';
 export * from './is';
 export * from './math';
-export * from './nextTick';
+export * from './asap';
 export * from './noop';
 export * from './object';
 export * from './regex';

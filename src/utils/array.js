@@ -5,10 +5,10 @@ var RE_QUERY_ATTR = /([\w]+)(\^|\*|=|!|\$|~)?=(\d+|null|undefined|true|false|'(?
 
 /**
  * 将 query 编译成 查询方法
- * 
+ *
  * @param {String} query 要编译的string
  * query = "attr^='somevalue'|c1=1,att2=2"
- * 
+ *
  * @return {Function} (Object)=>boolean
  */
 function compileQuery(query) {
@@ -41,10 +41,10 @@ function compileQuery(query) {
 
 /**
  * 判断某 Object 是否匹配`compileQuery`方法编译后的查询条件组
- * 
- * @param {Array} queryGroups 查询条件组 
- * @param {Object} obj 
- * 
+ *
+ * @param {Array} queryGroups 查询条件组
+ * @param {Object} obj
+ *
  * @returns {boolean}
  */
 function matchObject(queryGroups, obj) {
@@ -109,13 +109,13 @@ function matchObject(queryGroups, obj) {
 
 /**
  * 筛选数组
- * 
+ *
  * @param {String} query 查询字符串
  * @param {Array} arr 被查询的数组
- * 
+ *
  * @example
  * console.log(util.query("[attr!=undefined]", [{ attr: 1 }]))
- * 
+ *
  * 判断Object是否匹配
  * var match = util.query("attr^='somevalue'|c1=1,att2!=2");
  * match({
@@ -144,9 +144,9 @@ export function query(query, arr) {
 
 /**
  * map到一个新数组
- * 
- * @param {Array} arr 
- * @param {String|Function|Array} key 
+ *
+ * @param {Array} arr
+ * @param {String|Function|Array} key
  */
 export function map(arr, key) {
     var result = [];
@@ -178,10 +178,10 @@ export function map(arr, key) {
 
 /**
  * 筛选数组中匹配的
- * 
- * @param {Array} arr 
- * @param {String|Function|Object} key 
- * @param {any} val 
+ *
+ * @param {Array} arr
+ * @param {String|Function|Object} key
+ * @param {any} val
  */
 export function filter(arr, key, val) {
     var keyType = typeof key;
@@ -211,9 +211,9 @@ export function filter(arr, key, val) {
 
 /**
  * 查找第一个匹配的
- * 
- * @param {Array} arr 
- * @param {String|Function} key 
+ *
+ * @param {Array} arr
+ * @param {String|Function} key
  * @param {any} [val]
  */
 export function find(arr, key, val) {
@@ -238,10 +238,10 @@ export function find(arr, key, val) {
 
 /**
  * 移除数组中匹配的
- * 
- * @param {Array} arr 
- * @param {String|Function} key 
- * @param {any} [val] 
+ *
+ * @param {Array} arr
+ * @param {String|Function} key
+ * @param {any} [val]
  */
 export function remove(arr, key, val) {
     var keyType = typeof key;
@@ -268,10 +268,10 @@ export function remove(arr, key, val) {
 
 /**
  * 排除匹配的
- * 
- * @param {Array} arr 
- * @param {String|Function|Object} key 
- * @param {any} [val] 
+ *
+ * @param {Array} arr
+ * @param {String|Function|Object} key
+ * @param {any} [val]
  */
 export function exclude(arr, key, val) {
     var length = arr.length;
@@ -339,16 +339,37 @@ export function lastIndexOf(arr, key, val) {
     return -1;
 }
 
+/**
+ * 保障所有浏览器排序结果都一样
+ * @param {Array} arr 数组
+ * @param {Function} fn 比较方法
+ */
+export function sort(arr, fn) {
+    const symbol = Symbol(Date.now());
+    let i = -1;
+    let length = arr.length;
+    while (++i < length) {
+        arr[i][symbol] = i;
+    }
+    arr.sort((a, b) => {
+        return fn(a, b) || a[symbol] - b[symbol];
+    });
+    while (--i >= 0) {
+        delete arr[i][symbol];
+    }
+    return arr;
+}
+
 
 /**
  * 将数组分组
- * 
+ *
  * @example
  * groupBy('day,sum(amount)', [{ day: 333, amout: 22 }, { day: 333, amout: 22 }])
  * // [{ key: { day: 333 }, sum: { amount: 44 }, group: [...] }]
- * 
+ *
  * @param {String} query 分组条件
- * @param {Array} data 
+ * @param {Array} data
  * @return {Array}
  */
 export function groupBy(query, data) {
@@ -446,8 +467,8 @@ export function sum(arr, key) {
 
 /**
  * 数组操作
- * 
- * @param {Array} arr 
+ *
+ * @param {Array} arr
  */
 function ArrayQuery(arr) {
     this.array = arr;

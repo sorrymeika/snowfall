@@ -1,12 +1,17 @@
 var toString = Object.prototype.toString;
 
 function is(type) {
+    const objectTag = "[object " + type + "]";
     return function (obj) {
-        return toString.call(obj) == "[object " + type + "]";
+        return toString.call(obj) == objectTag;
     };
 }
 
 export const isObject = is("Object");
+
+export const isSymbol = is("Symbol");
+
+export const isRegExp = is("RegExp");
 
 export const isArray = Array.isArray || is("Array");
 
