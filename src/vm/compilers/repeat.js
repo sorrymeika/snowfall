@@ -1,5 +1,6 @@
 import { $, ELEMENT_NODE, COMMENT_NODE, cloneElement, closestElement, insertElementAfter } from '../../utils/dom';
 import { value as valueOfObject } from '../../utils/object';
+import { castPath } from '../../utils/castPath';
 import { isNumber } from '../../utils/is';
 import compileExpression from './compileExpression';
 import { findChildModel } from '../methods/findChildModel';
@@ -16,31 +17,29 @@ var ORDER_BY_THIS_FUNCTION = 1;
 var ORDER_BY_DELEGATE_FUNCTION = 2;
 var ORDER_BY_ATTRIBUTES_FUNCTION = 3;
 
-var RE_REPEAT = /([\w$]+)(?:\s*,\s*([\w$]+)){0,1}\s+in\s+([\w$]+(?:\.[\w$\(,\)]+){0,})(?:\s*\|\s*filter\s*:\s*(.+?)){0,1}(?:\s*\|\s*orderBy:(.+)){0,1}(\s|$)/;
+var RE_REPEAT = /([\w$]+)(?:\s*,\s*([\w$]+)){0,1}\s+in\s+([\w$]+(?:\.[\w$\(,\)]+|\[\d+\]){0,})(?:\s*\|\s*filter\s*:\s*(.+?)){0,1}(?:\s*\|\s*orderBy:(.+)){0,1}(\s|$)/;
 
 function initCollectionKey(template, compiler, collectionKey) {
     if (collectionKey.slice(-1) == ')') {
         compiler.isFn = true;
         compiler.fid = template.compileToFunction(compiler.vm, collectionKey, false);
 
-        collectionKey = collectionKey.replace(/\./g, '/');
+        compiler.collectionKey = collectionKey.replace(/\./g, '/');
     } else {
-        var attrs = collectionKey.split('.');
+        var attrs = castPath(collectionKey);
         var parentAlias = attrs[0];
         var parent = compiler.parent;
 
         while (parent) {
             if (parent.alias == parentAlias) {
-                attrs[0] = parent.collectionKey + '^child';
-                collectionKey = attrs.join('.');
+                attrs.shift();
                 compiler.offsetParent = parent;
                 break;
             }
             parent = parent.parent;
         }
+        compiler.collectionKeys = attrs;
     }
-
-    compiler.collectionKey = collectionKey;
 }
 
 
@@ -81,9 +80,9 @@ function updateRepeatView(template, nodeData) {
         }
 
         if (repeatCompiler.isFn) {
-            collection = new Collection(viewModel, repeatCompiler.collectionKey, collectionData);
+            collection = new Collection(collectionData, repeatCompiler.collectionKey, viewModel);
         } else {
-            collection = model && findChildModel(model, repeatCompiler.collectionKey);
+            collection = model && findChildModel(model, repeatCompiler.collectionKeys);
         }
 
         if (!collection) return;
@@ -286,7 +285,6 @@ export default class RepeatCompiler {
     /**
      * @example
      * compileOrderBy('date desc,{somedata} {somevalue}')
-     * 
      * @param {String} orderByCode
      */
     compileOrderBy(orderByCode) {

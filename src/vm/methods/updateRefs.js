@@ -1,31 +1,32 @@
 import { isCollection } from "../predicates";
+import { getMemberName } from "./connect";
 
 export function updateRefs(model) {
-    var value = model.$data;
-
-    if (model._linkedParents) {
-        model._linkedParents.forEach((item) => {
-            bubbleUpdate(item.model, model, item.childModelKey.split('.').pop(), value);
-        });
-    }
-    if (model.parent) {
-        bubbleUpdate(model.parent, model, model._key, value);
+    var parents = model.parents;
+    if (parents) {
+        var value = model.$data;
+        var i = -1;
+        var length = parents.length;
+        while (++i < length) {
+            bubbleUpdate(parents[i], model, getMemberName(parents[i], model), value);
+        }
     }
 }
 
 function bubbleUpdate(parent, model, key, value) {
     if (isCollection(parent)) {
-        var index = parent.indexOf(model);
-        if (index != -1 && parent.$array[index] !== value) {
-            if (!parent._isSetting) {
-                parent.$array = parent.$array.slice();
-                updateRefs(parent);
+        if (parent.$array[key] !== value) {
+            if (!parent._setting) {
+                if (!parent._inEach || (!parent._arrayIsNew && (parent._arrayIsNew = true))) {
+                    parent.$array = parent.$array.slice();
+                    updateRefs(parent);
+                }
             }
-            parent.$array[index] = value;
+            parent.$array[key] = value;
         }
     } else if (parent.$data[key] !== value) {
-        if (!parent._isSetting) {
-            parent.$data = Object.assign({}, parent.$data);
+        if (!parent._setting) {
+            parent.$data = { ...parent.$data };
             updateRefs(parent);
         }
         parent.$data[key] = value;

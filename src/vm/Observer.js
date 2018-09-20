@@ -1,53 +1,29 @@
-import { mixin as eventMixin, Event } from '../core/event';
-import { enqueueUpdate } from './methods/enqueueUpdate';
+import { eventMixin } from '../core/event';
+import { enqueueUpdate, nextTick } from './methods/enqueueUpdate';
 import { updateRefs } from './methods/updateRefs';
+import { get } from '../utils/object';
+import { identify } from '../utils/guid';
+import { disconnect } from './methods/connect';
 
-var nextTask;
-var taskId;
-var taskCount = 1;
-var callbacks = [];
 
-if (typeof MessageChannel !== 'undefined' && /^\[object MessageChannelConstructor\]$|\[native code\]/.test(MessageChannel.toString())) {
-    const channel = new MessageChannel();
-    const port = channel.port2;
-    channel.port1.onmessage = flushCallbacks;
-    nextTask = () => {
-        port.postMessage(1);
-    };
-} else {
-    nextTask = () => setTimeout(flushCallbacks, 0);
+interface IObservable {
+    get: () => any,
+    observe: (cb: (e: any) => any) => any
 }
 
-function flushCallbacks() {
-    var cbs = callbacks;
-    taskId = null;
-    callbacks = [];
-
-    for (var i = 0; i < cbs.length; i++) {
-        cbs[i]();
-    }
-}
-
-function nextTick(cb) {
-    callbacks.push(cb);
-    if (!taskId) {
-        nextTask();
-        taskId = ++taskCount;
-    }
-    return taskId;
-}
-
-export class Observer {
+export class Observer implements IObservable {
     constructor(data) {
+        this.cid = identify();
+        this.mapper = {};
+        this.render = this.render.bind(this);
         if (data !== undefined) {
             this.set(data);
         }
-        this.root = this;
-        this.render = this.render.bind(this);
+        this.initialized = true;
     }
 
-    get() {
-        return this.$data;
+    get(keys) {
+        return keys == null ? get(this.$data, keys) : this.$data;
     }
 
     set(data) {
@@ -64,36 +40,28 @@ export class Observer {
     observe(key, fn) {
         if (typeof key === 'function') {
             fn = key;
-            key = this.key ? ':' + this.key : '';
+            key = '';
         } else if (!fn) {
-            return Object.assign((cb) => this.observe(key, cb), {
-                context: this,
-                attribute: key
-            });
+            return !key
+                ? this
+                /* eslint no-use-before-define: "off" */
+                : new ChangeObserver(this, key);
         } else {
-            key = parseEventName(this.key, key);
+            key = parseEventName(key);
         }
 
-        var self = this;
-        var cb = function (e) {
-            if (e.target === self || self.contains(e.target)) {
-                return fn.call(self, e);
-            }
-        };
-        cb._cb = fn;
-
-        return this.root.on('datachanged' + key, cb);
+        return this.on('datachanged' + key, fn);
     }
 
     unobserve(key, fn) {
         if (typeof key === 'function') {
             fn = key;
-            key = this.key ? ':' + this.key : '';
+            key = '';
         } else {
-            key = parseEventName(this.key, key);
+            key = parseEventName(key);
         }
 
-        return this.root.off('datachanged' + key, fn);
+        return this.off('datachanged' + key, fn);
     }
 
     contains(model) {
@@ -105,43 +73,59 @@ export class Observer {
     }
 
     nextTick(cb) {
-        this._nextTick ? this.one('datachanged', cb) : cb.call(this);
+        nextTick(cb);
         return this;
     }
 
-    renderNextTick() {
-        if (!this._nextTick) {
-            this._nextTick = this._rendering ? 1 : (this.taskId = nextTick(this.render));
-        }
-    }
-
     render() {
-        this._rendering = true;
-
-        var count = 0;
-        while (this._nextTick) {
-            this._nextTick = null;
-            this.trigger(new Event('datachanged', {
-                target: this,
-                changeCount: count
-            }));
-            count++;
-        }
-        this._rendering = false;
     }
 
     destroy() {
+        const parents = this.parents;
+        if (parents) {
+            var i = -1;
+            var length = parents.length;
+            while (++i < length) {
+                disconnect(parents[i], this);
+            }
+        }
+
         this.trigger('destroy')
             .off();
     }
 }
 
-function parseEventName(selfKey, attrs) {
+export class ChangeObserver extends Observer {
+    constructor(model, name) {
+        super();
+
+        this.model = model;
+        this.name = name;
+    }
+
+    set() { }
+
+    get() {
+        return this.model.get(this.name);
+    }
+
+    observe(cb) {
+        this.model.observe(this.name, cb);
+    }
+
+    unobserve(cb) {
+        this.model.unobserve(this.name, cb);
+    }
+}
+
+function parseEventName(attrs) {
     return attrs
-        .split(/\s+/)
-        .filter(name => !!name)
-        .map(name => ':' + (selfKey ? selfKey + '.' + name : name))
-        .join(' datachanged');
+        ? attrs
+            .split(/\s+/)
+            .filter(name => !!name)
+            .map(name => ':' + name.replace(/\./g, '/'))
+            .join(' datachanged')
+        : '';
 }
 
 eventMixin(Observer);

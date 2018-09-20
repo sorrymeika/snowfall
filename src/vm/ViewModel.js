@@ -4,7 +4,6 @@ import { $, eachElement } from '../utils/dom';
 import { unbindEvents, bindEvents } from './compilers/events';
 import { TemplateCompiler } from './compilers/template';
 
-import { Event } from '../core/event';
 import { Model } from './Model';
 
 function compileNewTemplate(viewModel, template) {
@@ -14,7 +13,7 @@ function compileNewTemplate(viewModel, template) {
     });
 
     viewModel.compiler.compile(viewModel, $element);
-    viewModel.renderNextTick();
+    viewModel.emitChange();
 
     return $element;
 }
@@ -55,9 +54,9 @@ export class ViewModel extends Model {
 
     /**
      * 双向绑定model
-     * 
+     *
      * @example
-     * 
+     *
      * // 初始化一个 ViewModel
      * new ViewModel({
      *     components: {},
@@ -65,7 +64,7 @@ export class ViewModel extends Model {
      *     attributes: {
      *     }
      * })
-     * 
+     *
      * @param {String|Element|Boolean|Object} [template] 字符类型或dom元素时为模版，当参数为Object时，若el和attributes属性都存在，则参数为配置项，否则为attributes
      * @param {Object} [attributes] 属性
      * @param {Array} [children] 子节点列表
@@ -103,7 +102,7 @@ export class ViewModel extends Model {
             self.$el.push(this.snReplacement ? this.snReplacement : this);
         });
 
-        return this;
+        return $el;
     }
 
     parents() {
@@ -185,14 +184,14 @@ export class ViewModel extends Model {
             .remove();
     }
 
-    takeOff(childNode) {
+    takeAway(childNode) {
         childNode = findOwnNode(this, childNode);
         if (!childNode) return null;
 
         childNode.snViewModel = this;
         this.$el.push(childNode);
         bindEvents(this, $(childNode));
-        (this._takeOffEls || (this._takeOffEls = [])).push(childNode);
+        (this._outerNodes || (this._outerNodes = [])).push(childNode);
         return childNode;
     }
 
@@ -201,16 +200,16 @@ export class ViewModel extends Model {
         if (index != -1) {
             delete childNode.snViewModel;
             Array.prototype.splice.call(this.$el, index, 1);
-            this._takeOffEls.splice(this._takeOffEls.indexOf(childNode), 1);
+            this._outerNodes.splice(this._outerNodes.indexOf(childNode), 1);
             unbindEvents(this, $(childNode));
         }
     }
 
     bringBackAll() {
-        var els = this._takeOffEls;
-        if (els) {
-            for (var i = els.length - 1; i >= 0; i--) {
-                var childNode = els[i];
+        var nodes = this._outerNodes;
+        if (nodes) {
+            for (var i = nodes.length - 1; i >= 0; i--) {
+                var childNode = nodes[i];
                 var index = this.$el.indexOf(childNode);
                 if (index != -1) {
                     delete childNode.snViewModel;
@@ -218,9 +217,9 @@ export class ViewModel extends Model {
                     unbindEvents(this, $(childNode));
                 }
             }
-            this._takeOffEls = null;
+            this._outerNodes = null;
         }
-        return els;
+        return nodes;
     }
 
     dataOfElement(el, keys, value) {
@@ -237,13 +236,13 @@ export class ViewModel extends Model {
         if (arguments.length == 3) {
             switch (name) {
                 case 'srcElement':
-                    objectUtils.value(el, attrs.slice(1, -1))[attrs.pop()] = value;
+                    objectUtils.get(el, attrs.slice(1, -1))[attrs.pop()] = value;
                     break;
                 case 'document':
-                    objectUtils.value(document, attrs.slice(1, -1))[attrs.pop()] = value;
+                    objectUtils.get(document, attrs.slice(1, -1))[attrs.pop()] = value;
                     break;
                 case 'window':
-                    objectUtils.value(window, attrs.slice(1, -1))[attrs.pop()] = value;
+                    objectUtils.get(window, attrs.slice(1, -1))[attrs.pop()] = value;
                     break;
                 default:
                     model.set(attrs, value);
@@ -254,39 +253,17 @@ export class ViewModel extends Model {
         return model.get(attrs);
     }
 
-    nextTick(cb) {
-        this._nextTick || this._rendering ? this.one('viewDidUpdate', cb) : cb.call(this);
-        return this;
-    }
-
     render() {
-        this._rendering = true;
         this.viewWillUpdate && this.viewWillUpdate();
 
         var compiler = this.compiler;
 
-        // console.time('render-' + this.cid);
-        var count = 0;
+        this.refs = {};
+        this.$el && eachElement(this.$el, (el) => {
+            if ((el.snViewModel && el.snViewModel != this)) return false;
 
-        do {
-            this._nextTick = null;
-            this.trigger(new Event('datachanged', {
-                target: this,
-                changeCount: count
-            }));
-
-            this.refs = {};
-            this.$el && eachElement(this.$el, (el) => {
-                if ((el.snViewModel && el.snViewModel != this) || this._nextTick) return false;
-
-                return compiler.updateNode(el);
-            });
-            count++;
-        } while (this._nextTick);
-
-        // console.timeEnd('render-' + this.cid);
-
-        this._rendering = false;
+            return compiler.updateNode(el);
+        });
 
         this.trigger('viewDidUpdate');
         this.viewDidUpdate && this.viewDidUpdate();

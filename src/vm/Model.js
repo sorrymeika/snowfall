@@ -1,9 +1,6 @@
 import { isBoolean, isArray, isPlainObject, isThenable, isString } from '../utils/is';
 import { extend, deepClone } from '../utils/clone';
-import { identify } from '../utils/guid';
-
-import { Event } from '../core/event';
-import { linkObservers, unlinkObservers } from './linker';
+import { get } from '../utils/object';
 
 import { Observer } from './Observer';
 import { Collection } from './Collection';
@@ -13,60 +10,45 @@ import { isModel, isCollection, isObservable } from './predicates';
 import { enqueueUpdate } from './methods/enqueueUpdate';
 import { blindSet } from './methods/blindSet';
 import { updateRefs } from './methods/updateRefs';
+import { connect, disconnect } from './methods/connect';
+
 
 const toString = Object.prototype.toString;
 const RE_QUERY = /(?:^|\.)([_a-zA-Z0-9]+)(\[(?:'(?:\\'|[^'])*'|"(?:\\"|[^"])*"|[^\]])+\](?:\[[\+\-]?\d*\])?)?/g;
 
-function attributeFactory(parent, name, value) {
-    return parent.constructor.attributeFactory(parent, name, value);
-}
-
 export class Model extends Observer {
-    static attributeFactory(parent, name, value) {
+    static attributeFactory(value, name, parent) {
         if (isPlainObject(value)) {
-            return new Model(parent, name, value);
+            return new Model(value, name, parent);
         } else if (isArray(value)) {
-            return new Collection(parent, name, value);
+            return new Collection(value, name, parent);
         } else {
             return value;
         }
     }
 
-    constructor(parent, key, attributes) {
+    constructor(attributes, key, parent) {
         super();
+        this.initialized = false;
 
-        if (arguments.length <= 1) {
-            var defaultAttributes = this.constructor.defaultAttributes;
-
-            this.root = this;
-            attributes = parent === undefined
-                ? extend({}, this.attributes, defaultAttributes)
-                : isPlainObject(defaultAttributes)
-                    ? Object.assign({}, defaultAttributes, parent)
-                    : parent;
-        } else {
-            if (isModel(parent)) {
-                this.key = parent.key ? parent.key + '.' + key : key;
-                this._key = key;
-            } else if (isCollection(parent)) {
-                this.key = parent.key + '^child';
-                this._key = parent._key + '^child';
-                this.parentIsCollection = true;
-            } else {
-                throw new Error('Model\'s parent mast be Collection or Model');
-            }
-            this.parent = parent;
-            this.root = parent.root;
+        if (parent) {
+            connect(parent, this, key);
         }
-
-        this.cid = identify();
 
         this.$data = null;
         this.$model = {};
+        this.dirty = false;
 
-        this.changed = false;
+        var defaultAttributes = this.constructor.defaultAttributes;
+
+        attributes = attributes === undefined
+            ? defaultAttributes
+            : isPlainObject(defaultAttributes)
+                ? Object.assign({}, defaultAttributes, attributes)
+                : attributes;
 
         this.set(attributes);
+        this.initialized = true;
     }
 
     get attributes() {
@@ -80,23 +62,23 @@ export class Model extends Observer {
     /**
      * 搜索子Model/Collection，
      * 支持多种搜索条件
-     * 
+     *
      * 搜索子Model:
      * model._('user') 或 model._('user.address')
-     * 
+     *
      * 根据查询条件查找子Collection下的Model:
      * model._('collection[id=222][0].options[text~="aa"&value="1"][0]')
      * model._('collection[id=222][0].options[text~="aa"&value="1",attr^='somevalue'|attr=1][0]')
-     * 
+     *
      * 且条件:
      * model._("collection[attr='somevalue'&att2=2][1].aaa[333]")
-     * 
+     *
      * 或条件:
      * model._("collection[attr^='somevalue'|attr=1]")
-     * 
+     *
      * 不存在时添加，不可用模糊搜索:
      * model._("collection[attr='somevalue',attr2=1][+]")
-     * 
+     *
      * @param {string} search 搜索条件
      * @param {any} [def] collection[attr='val'][+]时的默认值
      */
@@ -125,45 +107,23 @@ export class Model extends Observer {
         return !result && def !== undefined ? def : result;
     }
 
+    pick(keys) {
+        return keys && keys.map((key) => this.get(key));
+    }
+
     get(key) {
         if (!this.$data) return undefined;
-        if (typeof key === 'undefined') return this.$data;
-
-        if (typeof key == 'string') {
-            var keys = key.split(/\s+/)
-                .filter(name => !!name);
-            if (keys.length >= 2) {
-                return keys.map((name) => this.get(name));
-            }
-            if (key.indexOf('.') != -1) {
-                key = key.split('.');
-            }
-        }
-
-        var data;
-        if (isArray(key)) {
-            data = this.$data;
-
-            for (var i = key[0] == 'this' ? 1 : 0, len = key.length; i < len; i++) {
-                if (!(data = data[key[i]]))
-                    return null;
-            }
-        } else if (key == 'this') {
-            return this.$data;
-        } else {
-            data = this.$data[key];
-        }
-
-        return data;
+        if (key == null) return this.$data;
+        return get(this.$data, key);
     }
 
     /**
      * 设置Model
-     * 
+     *
      * 参数: [renew, Object] | [renew, key, val] | [key, val] | [Object]
      * [renew, key, val] 替换子model数据
      * [renew, Object] 时覆盖当前model数据
-     * 
+     *
      * @param {Boolean} [renew] 是否替换掉现有数据
      * @param {String|Object} key 属性名
      * @param {any} [val] 属性值
@@ -173,7 +133,6 @@ export class Model extends Observer {
             attrs,
             keys,
             renewChild = false,
-            root = this.root,
             argsLength = arguments.length,
             keyIsVal;
 
@@ -226,7 +185,7 @@ export class Model extends Observer {
         }
 
         this.$data = attributes;
-        this._isSetting = true;
+        this._setting = true;
 
         if (renew) {
             for (var name in attributes) {
@@ -250,9 +209,9 @@ export class Model extends Observer {
                     attributes[attr] = value.$data;
 
                     if (isObservable(origin)) {
-                        unlinkObservers(this, origin);
+                        disconnect(this, origin);
                     }
-                    linkObservers(this, value, this.key ? this.key + '.' + attr : attr);
+                    connect(this, value, attr);
 
                     isChange = true;
                 } else if (isModel(origin)) {
@@ -278,12 +237,12 @@ export class Model extends Observer {
                         this.set(renew, attr, res);
                     }).bind(this, attr));
                 } else {
-                    value = attributeFactory(this, attr, value);
+                    value = attributeFactory(value, attr, this);
                     if (isObservable(value)) {
                         $model[attr] = value;
                         attributes[attr] = value.$data;
                     } else {
-                        changes.push(this.key ? this.key + "." + attr : attr, value, attributes[attr]);
+                        changes.push(attr, value, attributes[attr]);
                         attributes[attr] = value;
                     }
                     isChange = true;
@@ -296,15 +255,13 @@ export class Model extends Observer {
             updateRefs(this);
             if (this._hasOnChangeListener) {
                 for (var i = 0, length = changes.length; i < length; i += 3) {
-                    root.trigger(new Event("change:" + changes[i], {
-                        target: this
-                    }), changes[i + 1], changes[i + 2]);
+                    this.trigger("change:" + changes[i], changes[i + 1], changes[i + 2]);
                 }
             }
         } else {
             this.$data = oldAttributes;
         }
-        this._isSetting = false;
+        this._setting = false;
         this._isChange = isChange;
 
         if (process.env.NODE_ENV === 'development') {
@@ -349,25 +306,21 @@ export class Model extends Observer {
         return this.model(key).set(value);
     }
 
-    compute(listeners, calc) {
-        var observer = new Observer();
-        var args = [];
-        var getArgs = () => args.map((arg) => {
-            return arg.context.get(arg.attribute);
-        });
-        var compute = () => observer.set(calc(...getArgs()));
-        listeners.forEach((listener) => {
-            if (isString(listener)) {
-                args.push({
-                    context: this,
-                    attribute: listener
-                });
-                this.change(listener, compute);
+    compute(observers, calc) {
+        observers = observers.map((value) => {
+            if (isString(value)) {
+                return this.observe(value);
             } else {
-                args.push(listener);
-                listener(compute);
+                return value;
             }
         });
+
+        var observer = new Observer();
+        var getArgs = () => observers.map((item) => {
+            return item.get();
+        });
+        var compute = () => observer.set(calc(getArgs()));
+        observers.forEach((item) => item.observe(compute));
         compute();
         return observer;
     }
@@ -375,19 +328,23 @@ export class Model extends Observer {
     /**
      * 监听当前 Model 的属性值变化
      */
-    change(attribute, fn) {
-        if (!fn) {
-            return Object.assign((cb) => this.change(attribute, cb), {
-                context: this,
-                attribute
-            });
+    observe(attribute, fn) {
+        if (attribute && isString(attribute) && fn) {
+            this._hasOnChangeListener = true;
+            const cb = (e, oldValue, newValue) => {
+                if (e.target === this) {
+                    return fn.call(this, e, oldValue, newValue);
+                }
+            };
+            cb._cb = fn;
+            this.on(parseChanges(attribute), cb);
         }
-        this._hasOnChangeListener = true;
-        this.root.on(parseChanges(attribute), (e, oldValue, newValue) => {
-            if (e.target === this) {
-                return fn.call(this, e, oldValue, newValue);
-            }
-        });
+        return super.observe(attribute, fn);
+    }
+
+    unobserve(attribute, fn) {
+        attribute && isString(attribute) && this.off(parseChanges(attribute), fn);
+        return super.unobserve(attribute, fn);
     }
 
     getJSON(key) {
@@ -397,6 +354,20 @@ export class Model extends Observer {
     toJSON() {
         return extend(true, {}, this.$data);
     }
+
+    destroy() {
+        super.destroy();
+        for (var key in this.$model) {
+            var model = this.$model[key];
+            if (model) {
+                disconnect(this, model);
+            }
+        }
+    }
+}
+
+function attributeFactory(value, name, parent) {
+    return parent.constructor.attributeFactory(value, name, parent);
 }
 
 function parseChanges(attrs) {

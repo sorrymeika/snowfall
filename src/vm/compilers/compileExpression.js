@@ -27,18 +27,18 @@ const KEYWORDS = {
 };
 
 var RE_MATCH_EXPRESSION = codeRegExp("{...}", 'g');
-var RE_EXPRESSION = /'(?:(?:\\{2})+|\\'|[^'])*'|"(?:(?:\\{2})+|\\"|[^"])*"|function\s*\((.*?)\)|\bvar\s+('(?:(?:\\{2})+|\\'|[^'])*'|[^;]+);|(?:\{|,)\s*[\w$]+\s*:\s*|([\w$]+)\(|([\w$]+(?:\.[\w$]+|\[[\w$']+\])*)(\()?/g;
+var RE_EXPRESSION = /'(?:(?:\\{2})+|\\'|[^'])*'|"(?:(?:\\{2})+|\\"|[^"])*"|function\s*\((.*?)\)|\bvar\s+('(?:(?:\\{2})+|\\'|[^'])*'|[^;]+);|(?:\{|,)\s*[\w$]+\s*:\s*|([\w$]+)\(|([\w$]+(?:\.[\w$]+|\[[^\]]+\])*)(\()?/g;
 var RE_VARS = /([\w$]+)\s*(?:=(?:'(?:\\'|[^'])*'|[^;,]+))?/g;
 var RE_VALUE = /^(-?\d+(\.\d+)?|true|false|undefined|null|'(?:\\'|[^'])*')$/;
 
 /**
  * 将字符串表达式转为function code
- * 
+ *
  * @example
  * compileExpression('name and age: {user.name+user.age}')
  * compileExpression('user.name+user.age', false)
  * compileExpression('{var a=2,c=2,b;b=name+tt,t$y_p0e=type_$==1?2:1}')
- * 
+ *
  * @param {string} expression 转化为function的表达式，如：
  * @param {boolean} withBraces 语句中是否包含大括号
  */
@@ -88,8 +88,7 @@ export default function compileExpression(expression, withBraces) {
     };
 }
 
-function parseExpression(expression, variables) {
-    var functionInputs = {};
+function parseExpression(expression, variables, functionInputs = {}) {
     var lastPoint;
 
     return expression.replace(RE_EXPRESSION, function (match, inputs, vars, fn, name, bracket, index) {
@@ -117,7 +116,9 @@ function parseExpression(expression, variables) {
 }
 
 function compileToString(str) {
-    return str ? '\'' + str.replace(/\\/g, '\\\\').replace(/'/g, '\\\'') + '\'' : str;
+    return str ? '\'' + str.replace(/\\/g, '\\\\').replace(/'/g, '\\\'')
+        .replace(/\r/g, '\\r')
+        .replace(/\n/g, '\\n') + '\'' : str;
 }
 
 function valueExpression(str, variables, functionInputs) {
@@ -142,6 +143,13 @@ function valueExpression(str, variables, functionInputs) {
         }
     }
 
+    str = str.replace(/\[([^\]]+)\]/g, (match, exp) => {
+        var varName = '$temp_var' + variables.length;
+        variables.push(varName + '=' + parseExpression(exp, variables, functionInputs));
+        return '.~[' + varName + ']';
+    });
+
+    arr = str.split('.');
     str = gb + '.' + str;
 
     var result = [];
@@ -150,7 +158,8 @@ function valueExpression(str, variables, functionInputs) {
         result[i] = (i == 0 ? gb : result[i - 1]) + '.' + arr[i];
     }
     for (i = 0; i < result.length; i++) {
-        code += (i ? '&&' : '') + result[i] + '!==null&&' + result[i] + '!==undefined';
+        code += (i ? '&&' : '') + result[i] + '!=null';
     }
-    return '((' + code + ')?' + str + ':"")';
+    code = '((' + code + ')?' + str + ':"")';
+    return code.replace(/\.~\[/g, '[');
 }

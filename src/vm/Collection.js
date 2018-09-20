@@ -1,56 +1,34 @@
 import { isArray, isString, isFunction } from '../utils/is';
-import { identify } from '../utils/guid';
 import * as arrayUtils from '../utils/array';
 import { extend } from '../utils/clone';
-import { linkObservers, unlinkObservers } from './linker';
 
 import { Observer } from './Observer';
 import { Model } from './Model';
 import { enqueueUpdate } from './methods/enqueueUpdate';
 import { updateRefs } from './methods/updateRefs';
-import { isModel, isObservable } from './predicates';
+import { connect, setMapper, disconnect } from './methods/connect';
+import { isModel, isObservable, isCollection } from './predicates';
 import { contains } from '../utils/object';
 
 var RE_COLL_QUERY = /\[((?:'(?:\\'|[^'])*'|"(?:\\"|[^"])*"|[^\]])+)\](?:\[([\+\-]?)(\d+)?\])?(?:\.(.*))?/;
 
-var COLLECTION_UPDATE_ONLY_EXISTS = 2;
-var COLLECTION_UPDATE_TO = 3;
-
 export class Collection extends Observer {
-    static itemFactory(parent, index, data) {
-        return new Model(parent, index, data);
+    static itemFactory(data, index, parent) {
+        return new Model(data, index, parent);
     }
 
-    constructor(parent, attributeName, array) {
+    constructor(array, attributeName, parent) {
         super();
+        this.initialized = false;
 
-        var parentKey;
-
-        if (isArray(parent)) {
-            array = parent;
-            parent = null;
+        if (parent) {
+            connect(parent, this, attributeName);
         }
-
-        if (!attributeName) attributeName = "$array";
-
-        this.cid = identify();
         this.$array = [];
-
-        if (!parent) {
-            this.root = this;
-        } else {
-            this.parent = parent;
-            this.root = parent.root;
-            parentKey = parent.key;
-            parent.$data[attributeName] = this.$array;
-        }
-
-        this.key = parentKey ? (parentKey + "." + attributeName) : attributeName;
-        this._key = attributeName;
-
-        this.changed = false;
+        this.dirty = false;
 
         if (array && array.length) this.add(array);
+        this.initialized = true;
     }
 
     get $data() {
@@ -69,10 +47,10 @@ export class Collection extends Observer {
 
     /**
      * 查询Collection的子Model/Collection
-     * 
+     *
      * 第n个:
      * collection._(1)
-     * 
+     *
      * 查询所有符合的:
      * collection._("[attr='val']")
      * 数据类型也相同:[attr=='val']
@@ -82,25 +60,25 @@ export class Collection extends Observer {
      * 包含val，不区分大小写:[attr~='val']
      * 或:[attr='val'|attr=1,attr='val'|attr=1]
      * 且:[attr='val'&attr=1,attr='val'|attr=1]
-     * 
+     *
      * 查询并返回第n个:
      * collection._("[attr='val'][n]")
-     * 
+     *
      * 一个都不存在则添加:
      * collection._("[attr='val'][+]")
-     * 
+     *
      * 结果小于n个时则添加:
      * collection._("[attr='val'][+n]")
-     * 
+     *
      * 删除全部搜索到的，并返回被删除的:
      * collection._("[attr='val'][-]")
-     * 
+     *
      * 删除搜索结果中第n个，并返回被删除的:
      * collection._("[attr='val'][-n]")
-     * 
+     *
      * @param {string} search 查询条件
      * @param {object} [def] 数据不存在时默认添加的数据
-     * 
+     *
      * @return {array|Model|Collection}
      */
     _(search, def) {
@@ -182,9 +160,18 @@ export class Collection extends Observer {
     }
 
     indexOf(key, val) {
-        return isModel(key)
-            ? Array.prototype.indexOf.call(this, key)
-            : arrayUtils.indexOf(this.$array, key, val);
+        if (isModel(key)) {
+            var length = this.length;
+            var i = -1;
+            while (++i < length) {
+                if (this[i] === key) {
+                    return i;
+                }
+            }
+            return -1;
+        } else {
+            return arrayUtils.indexOf(this.$array, key, val);
+        }
     }
 
     lastIndexOf(key, val) {
@@ -199,8 +186,7 @@ export class Collection extends Observer {
     }
 
     get(i) {
-        if (i == undefined) return this.$array;
-
+        if (i == null) return this.$array;
         return this[i].get();
     }
 
@@ -226,8 +212,8 @@ export class Collection extends Observer {
                 if (isModel(item)) {
                     if (item != model) {
                         isChange = true;
-                        unlinkObservers(this, model);
-                        linkObservers(this, item, this.key + '^child');
+                        disconnect(this, model);
+                        connect(this, item, i);
 
                         this[i] = item;
                         this.$array[i] = item.$data;
@@ -263,22 +249,27 @@ export class Collection extends Observer {
         var dataLen = array.length;
         var results = [];
 
+
         if (dataLen) {
             for (var i = 0; i < dataLen; i++) {
                 var dataItem = array[i];
+                var index = this.length;
 
                 if (isModel(dataItem)) {
-                    linkObservers(this, dataItem, this.key + '^child');
                     model = dataItem;
+                    connect(this, dataItem, index);
                 } else {
-                    model = itemFactory(this, this.length, dataItem);
+                    model = itemFactory(dataItem, index, this);
                 }
 
-                this[this.length++] = model;
-                this.$array.push(model.$data);
+                this[index] = model;
+                this.$array[index] = model.$data;
+
+                this.length++;
 
                 results.push(model);
             }
+
             this._isChange = true;
         }
 
@@ -288,35 +279,11 @@ export class Collection extends Observer {
     }
 
     /**
-     * 根据 Model 的 attributeName 更新Model
-     * collection.updateBy('id', 123, { name: '更新掉name' })
-     * 
-     * @param {String} attributeName 属性名
-     * @param {any} val 属性值
-     * @param {Object} data
-     * 
-     * @return {Collection} self
-     */
-    updateBy(attributeName, val, data) {
-        collectionWillUpdate(this);
-        var array = this.$array;
-        for (var i = 0; i < array.length; i++) {
-            if (array[i][attributeName] === val) {
-                this[i].set(data);
-                if (this[i]._isChange) {
-                    this._isChange = true;
-                }
-            }
-        }
-        return collectionDidUpdate(this);
-    }
-
-    /**
      * 更新collection中的所有item
      * collection.updateAll({ name: '更新掉name' })
-     * 
+     *
      * @param {Object} data
-     * 
+     *
      * @return {Collection} self
      */
     updateAll(data) {
@@ -332,73 +299,94 @@ export class Collection extends Observer {
     }
 
     /**
-     * 更新 collection 中的 model
-     * 
-     * @param {Array|Object} arr 需要更新的数组
-     * @param {String|Function} primaryKey 唯一健 或 (a, b)=>boolean
-     * @param {number} [updateType] 更新类型
-     * 默认 - collection中存在既增量更新，不存在既添加
-     * COLLECTION_UPDATE_TO - 根据arr更新，不在arr中的项将被删除
-     * COLLECTION_UPDATE_ONLY_EXISTS - 只更新collection中存在的
-     * 
+     * 根据 comparator 更新Model
+     * collection.updateBy('id', { id: 123 name: '更新掉name' })
+     * collection.updateBy('id', [{ id: 123 name: '更新掉name' }])
+     *
+     * @param {String} comparator 属性名/比较方法
+     * @param {Object} data
+     * @param {Object} renewItem 是否覆盖匹配项
+     *
      * @return {Collection} self
      */
-    update(arr, primaryKey, updateType?) {
+    updateBy(comparator, data, renewItem = false) {
+        return this.update(data, comparator, false, false, false);
+    }
+
+    /**
+     * 已有项将被覆盖，不在arr中的项将被删除，结果与入参array的排序可能会不同
+     * @param {*} arr
+     * @param {*} comparator
+     */
+    updateTo(arr, comparator) {
+        return this.update(arr, comparator, true, true, true);
+    }
+
+    /**
+     * 更新 collection 中的 model
+     *
+     * @param {Array|Object} arr 需要更新的数组
+     * @param {String|Function} comparator 唯一健 或 (a, b)=>boolean
+     * @param {number} [appendMatched] 是否追加不匹配的
+     * @param {number} [removeUnmatchedFromOrig] 是否移除不匹配的
+     * @param {number} [renewItem] 是否覆盖匹配项
+     *
+     * @return {Collection} self
+     */
+    update(arr, comparator, appendUnmatched = true, removeUnmatchedFromOrig = false, renewItem = false) {
         if (!arr) return this;
 
         var fn;
         var length = this.length;
 
         if (!length) {
-            (updateType !== COLLECTION_UPDATE_ONLY_EXISTS) && this.add(arr);
+            (appendUnmatched) && this.add(arr);
             return this;
         }
 
         collectionWillUpdate(this);
 
-        if (typeof primaryKey === 'string') {
+        if (isString(comparator)) {
             fn = function (a, b) {
-                return a[primaryKey] == b[primaryKey];
+                return a[comparator] == b[comparator];
             };
-        } else fn = primaryKey;
+        } else fn = comparator;
 
         var item;
         var arrItem;
-        var exists;
+        var matched;
 
         if (!isArray(arr)) arr = [arr];
         else arr = [].concat(arr);
 
         var n = arr.length;
-        var result;
-        var isUpdateToNewArray = updateType === COLLECTION_UPDATE_TO;
 
         for (var i = length - 1; i >= 0; i--) {
             item = this.$array[i];
-            exists = false;
+            matched = false;
 
             for (var j = 0; j < n; j++) {
                 arrItem = arr[j];
 
                 if (arrItem !== undefined) {
-                    if ((result = fn.call(this, item, arrItem))) {
-                        this[i].set(isUpdateToNewArray, typeof result == 'object' ? result : arrItem);
+                    if (fn.call(this, item, arrItem)) {
+                        this[i].set(renewItem, arrItem);
                         if (this[i]._isChange) {
                             this._isChange = true;
                         }
                         arr[j] = undefined;
-                        exists = true;
+                        matched = true;
                         break;
                     }
                 }
             }
 
-            if (isUpdateToNewArray && !exists) {
+            if (removeUnmatchedFromOrig && !matched) {
                 this.splice(i, 1);
             }
         }
 
-        if (updateType !== COLLECTION_UPDATE_ONLY_EXISTS) {
+        if (appendUnmatched) {
             var appends = [];
             for (i = 0; i < n; i++) {
                 if (arr[i] !== undefined) {
@@ -413,61 +401,85 @@ export class Collection extends Observer {
         return collectionDidUpdate(this);
     }
 
-    // 已有项将被覆盖，不在arr中的项将被删除
-    updateTo(arr, primaryKey) {
-        return this.update(arr, primaryKey, COLLECTION_UPDATE_TO);
-    }
-
-    // 只更新collection中存在的
-    updateExists(arr, primaryKey) {
-        return this.update(arr, primaryKey, COLLECTION_UPDATE_ONLY_EXISTS);
-    }
-
     unshift(data) {
         return this.insert(0, data);
     }
 
     insert(index, data) {
-        collectionWillUpdate(this);
-
-        var model;
-        var count;
-
         if (!isArray(data)) {
             data = [data];
         }
 
-        for (var i = 0, dataLen = data.length; i < dataLen; i++) {
-            var dataItem = data[i];
+        this.splice(index, 0, data);
 
-            if (isModel(dataItem)) {
-                model = dataItem;
-                linkObservers(this, model, this.key + '^child');
-            } else {
-                count = index + i;
-                model = itemFactory(this, count, dataItem);
-            }
-
-            Array.prototype.splice.call(this, count, 0, model);
-            this.$array.splice(count, 0, model.$data);
-        }
-        this._isChange = true;
-
-        return collectionDidUpdate(this);
+        return this;
     }
 
-    splice(start, count, data) {
+    splice(start, count, array) {
+        if (!count && !array) return [];
+
         collectionWillUpdate(this);
 
-        if (!count) count = 1;
+        var spliced = [];
+        var arrayLength = array ? array.length : 0;
+        var offset = arrayLength - count;
+        var i;
+        var offsetIndex;
+        var length;
+        var item;
+        var model;
+        var end = start + count;
+        var newLength;
 
-        var spliced = Array.prototype.splice.call(this, start, count);
-        this.$array.splice(start, count);
+        if (count) {
+            for (i = start; i < end; i++) {
+                spliced.push(this[i]);
+                disconnect(this, this[i]);
+            }
+        }
+
+        if (offset > 0) {
+            i = this.length;
+            while (--i >= end) {
+                offsetIndex = offset + i;
+                setMapper(this, this[offsetIndex] = this[i], offsetIndex);
+                this.$array[offsetIndex] = this.$array[i];
+            }
+            if (offsetIndex >= this.length) {
+                this.length = offsetIndex + 1;
+            }
+        } else if (offset < 0) {
+            i = end - 1;
+            length = this.length;
+            newLength = length + offset;
+            while (++i < length) {
+                offsetIndex = offset + i;
+                setMapper(this, this[offsetIndex] = this[i], offsetIndex);
+                this.$array[offsetIndex] = this.$array[i];
+                if (i >= newLength)
+                    delete this[i];
+            }
+            this.$array.splice(newLength, this.length - newLength);
+            this.length = newLength;
+        }
+
+        i = -1;
+        while (++i < arrayLength) {
+            item = array[i];
+            offsetIndex = start + i;
+
+            if (isModel(item)) {
+                model = item;
+                connect(this, model, offsetIndex);
+            } else {
+                model = itemFactory(item, offsetIndex, this);
+            }
+
+            this[offsetIndex] = model;
+            this.$array[offsetIndex] = model.$data;
+        }
+
         this._isChange = true;
-
-        this._desposeItems(spliced);
-
-        data && this.insert(start, data);
 
         collectionDidUpdate(this);
 
@@ -476,7 +488,7 @@ export class Collection extends Observer {
 
     /**
      * 移除Model
-     * 
+     *
      * @param {String|Model|Function|array} key 删除条件，(arrayItem)=>boolean
      * @param {any} [val]
      */
@@ -490,41 +502,58 @@ export class Collection extends Observer {
                 ? (item, i) => this[i] === key
                 : matcher(key, val);
         var removed = [];
+        var length = this.length;
+        var i = -1;
+        var index = -1;
+        var prevIndex = -1;
+        var newLength;
 
-        for (var i = this.length - 1; i >= 0; i--) {
+        while (++i < length) {
             if (fn.call(this, array[i], i)) {
                 removed.push(this[i]);
-                Array.prototype.splice.call(this, i, 1);
-                array.splice(i, 1);
-                this._isChange = true;
+                disconnect(this, this[i]);
+                delete this[i];
+                if (index === -1) {
+                    this._isChange = true;
+                    index = i;
+                }
             }
         }
 
-        this._desposeItems(removed);
-
-        return collectionDidUpdate(this);
-    }
-
-    /**
-     * 解除items与collection的link关系
-     * @param {array} items 
-     */
-    _desposeItems(items) {
-        if (this.root._linkedModels) {
-            items.forEach((model) => {
-                model._linkedParents && unlinkObservers(this, model);
-            });
+        if (index !== -1) {
+            i = index - 1;
+            newLength = length - removed.length;
+            while (++i < length) {
+                if (this[i] === undefined) {
+                    if (prevIndex === -1) {
+                        prevIndex = i;
+                    }
+                } else {
+                    setMapper(this, this[prevIndex] = this[i], prevIndex);
+                    this.$array[prevIndex] = this.$array[i];
+                    if (i >= newLength)
+                        delete this[i];
+                    prevIndex++;
+                }
+            }
+            this.$array.splice(newLength, this.length - newLength);
+            this.length = newLength;
         }
+
+        collectionDidUpdate(this);
+
+        return removed;
     }
 
     clear() {
         if (this.length == 0 && this.$array.length == 0) return this;
         for (var i = 0; i < this.length; i++) {
+            disconnect(this, this[i]);
             delete this[i];
         }
         this.$array = [];
         this.length = 0;
-        this._isSetting = 1;
+        this._setting = 1;
         this._isChange = true;
 
         return collectionDidUpdate(this);
@@ -540,9 +569,20 @@ export class Collection extends Observer {
             end = this.length;
         }
 
+        this._inEach = true;
+        this._arrayIsNew = false;
         for (; start < end; start++) {
             if (fn.call(this, this[start], start) === false) break;
         }
+
+        this._inEach = false;
+        if (this._arrayIsNew) {
+            if (process.env.NODE_ENV === 'development') {
+                Object.freeze(this.$array);
+            }
+            this._arrayIsNew = false;
+        }
+
         return this;
     }
 
@@ -558,6 +598,35 @@ export class Collection extends Observer {
         for (var i = 0; i < length; i++) {
             if (iterate(array[i], i)) return this[i];
         }
+        return null;
+    }
+
+    findAt(keys, val) {
+        var length = keys.length;
+        var result;
+        var interate = isFunction(val)
+            ? val
+            : (item) => contains(item, val);
+
+        this.each((item) => {
+            var i = -1;
+            while (++i < length) {
+                var name = keys[i];
+                var model = item._(name);
+                if (i + 2 >= length) {
+                    var next = keys[i + 1];
+                    var value = isObservable(model) ? model.get(next) : model;
+                    if (interate(value)) {
+                        result = model;
+                        return false;
+                    }
+                } else if (isCollection(model)) {
+                    result = model.findAt(keys.slice(i + 1), val);
+                    return result != null;
+                }
+            }
+        });
+
         return null;
     }
 
@@ -590,12 +659,13 @@ export class Collection extends Observer {
             this[i].$i = i;
         }
         Array.prototype.sort.call(this, function (a, b) {
-            return fn(a.$data, b.$data, a.$i, b.$i);
+            return fn(a.$data, b.$data) || a.$i - b.$i;
         });
 
         for (i = 0; i < n; i++) {
             if (this.$array[i] != this[i].$data) {
                 this.$array[i] = this[i].$data;
+                setMapper(this, this[i], i);
                 this._isChange = true;
             }
         }
@@ -618,23 +688,23 @@ function matcher(key, val) {
             : (item) => contains(item, key);
 }
 
-function itemFactory(collection, index, child) {
-    return collection.constructor.itemFactory(collection, index, child);
+function itemFactory(data, index, collection) {
+    return collection.constructor.itemFactory(data, index, collection);
 }
 
 function collectionWillUpdate(collection) {
-    if (!collection._isSetting) {
-        collection._isSetting = 1;
+    if (!collection._setting) {
+        collection._setting = 1;
         collection._isChange = false;
         collection.__arrayBackup = collection.$array;
         collection.$array = collection.$array.slice();
     } else {
-        collection._isSetting++;
+        collection._setting++;
     }
 }
 
 function collectionDidUpdate(collection) {
-    if (collection._isSetting && --collection._isSetting == 0) {
+    if (collection._setting && --collection._setting == 0) {
         if (collection._isChange) {
             enqueueUpdate(collection);
             updateRefs(collection);
@@ -645,7 +715,7 @@ function collectionDidUpdate(collection) {
         } else if (collection.__arrayBackup) {
             collection.$array = collection.__arrayBackup;
         }
-        collection._isSetting = false;
+        collection._setting = false;
         collection.__arrayBackup = null;
     }
     return collection;

@@ -1,36 +1,134 @@
-import { isCollection } from "../predicates";
-import { Event } from "../../core/event";
+import { getMemberName } from "./connect";
 
-export function enqueueUpdate(model) {
-    if (model.changed) return model;
-    model.changed = true;
+var doAsap;
+var taskId;
+var taskCount = 1;
+var callbacks = [];
 
-    var root = model.root;
-    var link = model;
-    var links = [];
+if (typeof MessageChannel !== 'undefined' && /^\[object MessageChannelConstructor\]$|\[native code\]/.test(MessageChannel.toString())) {
+    const channel = new MessageChannel();
+    const port = channel.port2;
+    channel.port1.onmessage = flushCallbacks;
+    doAsap = () => {
+        port.postMessage(1);
+    };
+} else {
+    doAsap = () => setTimeout(flushCallbacks, 0);
+}
 
-    while (link) {
-        if (link._linkedParents && link._linkedParents.length && !link._linkChanged) {
-            link._linkChanged = true;
-            links.push(link);
-            root.trigger("linkchange:" + link.cid);
-        }
-        link = link.parent;
+if (process.env.NODE_ENV === 'test') {
+    doAsap = () => Promise.resolve().then(flushCallbacks);
+}
+
+function flushCallbacks() {
+    var cbs = callbacks;
+    taskId = null;
+    callbacks = [];
+
+    for (var i = 0; i < cbs.length; i++) {
+        cbs[i]();
     }
+}
 
-    root.one('datachanged', function (e) {
-        links.forEach((ln) => {
-            ln._linkChanged = false;
-        });
-        model.changed = false;
-        if (model.key) {
-            var name = isCollection(model.parent) ? model.parent.key : model.key;
-            root.trigger(new Event("datachanged:" + name, {
-                target: model
-            }));
+function asap(cb) {
+    callbacks.push(cb);
+    if (!taskId) {
+        doAsap();
+        taskId = ++taskCount;
+    }
+    return taskId;
+}
+
+let dirts;
+let flags;
+let flushing = false;
+let changed;
+let nexts;
+
+function flushDirts() {
+    flushing = true;
+    while (dirts) {
+        const items = dirts;
+        const length = dirts.length;
+
+        changed = {};
+
+        var i = -1;
+        var target;
+
+        dirts = null;
+        flags = null;
+
+        while (++i < length) {
+            target = items[i];
+            target.dirty = false;
+            emitChange(target);
         }
-    })
-        .renderNextTick();
 
-    return model;
+        changed = null;
+    }
+    flushing = false;
+
+    if (nexts) {
+        var j = -1;
+        while (++j < nexts.length) {
+            nexts[j]();
+        }
+        nexts = null;
+    }
+}
+
+function emitChange(target) {
+    if (!changed[target.cid]) {
+        changed[target.cid] = true;
+        target.render();
+        target.trigger('datachanged');
+        bubbleChange(target);
+    }
+}
+
+function bubbleChange(target, paths) {
+    const parents = target.parents;
+    if (parents) {
+        const length = parents.length;
+        var i = -1;
+        var parent;
+        while (++i < length) {
+            parent = parents[i];
+            var name = getMemberName(parent, target);
+            var nextPaths = paths ? name + '/' + paths : name;
+            parent.trigger('datachanged:' + nextPaths, {
+                paths: nextPaths
+            });
+            bubbleChange(parent, nextPaths);
+            !paths && emitChange(parent);
+        }
+    }
+}
+
+export function enqueueUpdate(dirt) {
+    if (dirt && !dirt.dirty) {
+        dirt.dirty = true;
+
+        if (!dirts) {
+            dirts = [];
+            flags = {};
+            if (!flushing) asap(flushDirts);
+        }
+
+        if (!flags[dirt.cid]) {
+            flags[dirt.cid] = true;
+            dirts.push(dirt);
+        }
+    }
+}
+
+export function nextTick(cb) {
+    if (dirts || flushing) {
+        nexts
+            ? nexts.push(cb)
+            : (nexts = [cb]);
+    } else {
+        cb();
+    }
 }

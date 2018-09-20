@@ -1,42 +1,16 @@
-import { isModelOrCollection } from "../predicates";
+import { isCollection } from "../predicates";
 
-export function findChildModel(model, key) {
-    if (model.key == key) return model;
+export function findChildModel(model, paths) {
+    if (!paths || !paths.length) return model;
 
-    var modelMap = model.$model;
+    var i = -1;
+    var length = paths.length;
+    var path;
 
-    do {
-        var hasChild = false;
+    while (++i < length && model) {
+        path = paths[i];
+        model = (isCollection(model) ? model : model.$model)[path];
+    }
 
-        for (var modelKey in modelMap) {
-            model = modelMap[modelKey];
-
-            if (!isModelOrCollection(model)) return null;
-            if (model.key == key) return model;
-
-            var linkedParents = model._linkedParents;
-            var len;
-            if (linkedParents && (len = linkedParents.length)) {
-                for (var i = 0; i < len; i++) {
-                    var childModelKey = linkedParents[i].childModelKey;
-                    if (key == childModelKey) return model;
-
-                    if (key.indexOf(childModelKey + '.') == 0) {
-                        hasChild = true;
-                        key = key.substr(childModelKey.length + 1);
-                        break;
-                    }
-                }
-            } else if (key.indexOf(model.key + '.') == 0) {
-                hasChild = true;
-            }
-
-            if (hasChild && model.$model) {
-                modelMap = model.$model;
-                break;
-            }
-        }
-    } while (hasChild);
-
-    return null;
+    return model;
 }

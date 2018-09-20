@@ -159,15 +159,19 @@ export class TemplateCompiler {
                     break;
                 case 'sn-src':
                     if (val) {
-                        if (el.src) {
+                        if (el.src || el.nodeName !== 'IMG') {
                             el.src = val;
                         } else {
                             $(el)
                                 .one('load error', function (e) {
-                                    $(this).animate({
-                                        opacity: 1
-                                    }, 200);
-                                    if (e.type === 'error') el.removeAttribute('src');
+                                    if (e.type === 'error') {
+                                        el.removeAttribute('src');
+                                        el.style.opacity = "";
+                                    } else setTimeout(() => {
+                                        $(el).animate({
+                                            opacity: 1
+                                        }, 200);
+                                    }, 0);
                                 })
                                 .css({
                                     opacity: .3

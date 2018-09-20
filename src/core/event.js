@@ -52,7 +52,8 @@ const EventEmitterProto = {
             if (res === true)
                 self.off(name, once);
             return res;
-        };
+        }
+        once._cb = callback;
 
         return this.on(name, once);
     },
@@ -64,7 +65,8 @@ const EventEmitterProto = {
         function once() {
             self.off(name, once);
             return callback.apply(self, arguments);
-        };
+        }
+        once._cb = callback;
 
         return this.on(name, once);
     },
@@ -85,8 +87,8 @@ const EventEmitterProto = {
                 if (name) {
                     var fns = this._events[name.toLowerCase()];
                     if (fns) {
-                        for (var i = fns.length; i >= 0; i--) {
-                            if (fns[i] === callback) {
+                        for (var i = fns.length - 1; i >= 0; i--) {
+                            if (fns[i] === callback || fns[i]._cb === callback) {
                                 fns.splice(i, 1);
                                 break;
                             }
@@ -102,11 +104,9 @@ const EventEmitterProto = {
     trigger(e, ...args) {
         if (!this._events || !e) return this;
 
-        typeof e === 'string' && (e = new Event(e));
-
         var fns;
         var events = this._events;
-        var name = e.type.toLowerCase();
+        var name = (typeof e === 'string' ? e : e.type).toLowerCase();
         var dotIndex;
         var len;
 
@@ -119,6 +119,8 @@ const EventEmitterProto = {
         if (fns && (len = fns.length)) {
             var i = -1;
             var stoped;
+
+            typeof e === 'string' && (e = new Event(e));
 
             if (!e.target) e.target = this;
 
@@ -143,7 +145,7 @@ export function EventEmitter() {
 }
 EventEmitter.prototype = EventEmitterProto;
 
-export function mixin(fn, ext) {
+export function eventMixin(fn, ext) {
     Object.assign(typeof fn == 'function' ? fn.prototype : fn, EventEmitterProto, ext);
     return fn;
 }

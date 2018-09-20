@@ -10,7 +10,7 @@ export function blindSet(model, renew, keys, val) {
         key = keys[i];
 
         if (!isModel(model.$model[key])) {
-            tmp = model.$model[key] = new Model(model, key, {});
+            tmp = model.$model[key] = new Model({}, key, model);
             model.$data[key] = tmp.$data;
             model = tmp;
         } else {
