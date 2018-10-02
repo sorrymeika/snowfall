@@ -27,7 +27,7 @@ const KEYWORDS = {
 };
 
 var RE_MATCH_EXPRESSION = codeRegExp("{...}", 'g');
-var RE_EXPRESSION = /'(?:(?:\\{2})+|\\'|[^'])*'|"(?:(?:\\{2})+|\\"|[^"])*"|function\s*\((.*?)\)|\bvar\s+('(?:(?:\\{2})+|\\'|[^'])*'|[^;]+);|(?:\{|,)\s*[\w$]+\s*:\s*|([\w$]+)\(|([\w$]+(?:\.[\w$]+|\[[^\]]+\])*)(\()?/g;
+var RE_EXPRESSION = /'(?:(?:\\{2})+|\\'|[^'])*'|"(?:(?:\\{2})+|\\"|[^"])*"|\/(?:(?:\\{2})+|\\\/|[^/])*\/[img]*\.(?:test|exec)\(|function\s*\((.*?)\)|\bvar\s+('(?:(?:\\{2})+|\\'|[^'])*'|[^;]+);|(?:\{|,)\s*[\w$]+\s*:\s*|([\w$]+)\(|([\w$]+(?:\.[\w$]+|\[[^\]]+\])*)(\()?/g;
 var RE_VARS = /([\w$]+)\s*(?:=(?:'(?:\\'|[^'])*'|[^;,]+))?/g;
 var RE_VALUE = /^(-?\d+(\.\d+)?|true|false|undefined|null|'(?:\\'|[^'])*')$/;
 
@@ -162,4 +162,8 @@ function valueExpression(str, variables, functionInputs) {
     }
     code = '((' + code + ')?' + str + ':"")';
     return code.replace(/\.~\[/g, '[');
+}
+
+if (process.env.NODE_ENV === 'dev') {
+    console.assert(compileExpression(`background-color:{bizData.bgColor}; width: {['100%', '48.8%', '31.6%', 100 / products.length - 1.39 + '%'][products.length-1] || (100/products.length - 1.39 + (products.length-4)*0.11 + '%')}`).code === `try{return 'background-color:'+((($data.bizData!=null&&$data.bizData.bgColor!=null)?$data.bizData.bgColor:""))+'; width: '+(['100%', '48.8%', '31.6%', 100 / (($data.products!=null&&$data.products.length!=null)?$data.products.length:"") - 1.39 + '%'][(($data.products!=null&&$data.products.length!=null)?$data.products.length:"")-1] || (100/(($data.products!=null&&$data.products.length!=null)?$data.products.length:"") - 1.39 + ((($data.products!=null&&$data.products.length!=null)?$data.products.length:"")-4)*0.11 + '%'));}catch(e){console.error(e);return '';}`, 'compileExpression failure');
 }

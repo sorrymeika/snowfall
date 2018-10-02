@@ -70,17 +70,25 @@ function flushDirts() {
     flushing = false;
 
     if (nexts) {
-        var j = -1;
-        while (++j < nexts.length) {
-            nexts[j]();
-        }
+        let j = -1;
+        const fns = nexts;
+
+        // 清空next tick functions
+        // nextTick(() => {
+        //     model.set({ ...changed })
+        //         .nextTick(() => '下一个asap中执行');
+        // });
         nexts = null;
+
+        while (++j < fns.length) {
+            fns[j]();
+        }
     }
 }
 
 function emitChange(target) {
-    if (!changed[target.cid]) {
-        changed[target.cid] = true;
+    if (!changed[target.$id]) {
+        changed[target.$id] = true;
         target.render();
         target.trigger('datachanged');
         bubbleChange(target);
@@ -116,8 +124,8 @@ export function enqueueUpdate(dirt) {
             if (!flushing) asap(flushDirts);
         }
 
-        if (!flags[dirt.cid]) {
-            flags[dirt.cid] = true;
+        if (!flags[dirt.$id]) {
+            flags[dirt.$id] = true;
             dirts.push(dirt);
         }
     }
@@ -128,6 +136,8 @@ export function nextTick(cb) {
         nexts
             ? nexts.push(cb)
             : (nexts = [cb]);
+    } else if (nexts) {
+        nexts.push(cb);
     } else {
         cb();
     }

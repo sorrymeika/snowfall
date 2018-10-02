@@ -34,7 +34,7 @@ function getEventProxy(viewModel) {
             return;
         }
         var target = e.currentTarget;
-        var eventCode = target.getAttribute('sn' + viewModel.cid + e.type);
+        var eventCode = target.getAttribute('sn' + viewModel.$id + e.type);
 
         if (eventCode == 'false') {
             return false;
@@ -93,7 +93,7 @@ export function bindEvents(viewModel, $element) {
         eventName = EVENTS[key];
 
         if (isBubbleEvent(eventName)) {
-            eventAttr = '[sn' + viewModel.cid + eventName + ']';
+            eventAttr = '[sn' + viewModel.$id + eventName + ']';
             $element
                 .on(eventName, eventAttr, eventFn)
                 .filter(eventAttr)
@@ -115,7 +115,7 @@ export function unbindEvents(viewModel, $element) {
 
         for (var key in EVENTS) {
             eventName = EVENTS[key];
-            eventAttr = '[sn' + viewModel.cid + eventName + ']';
+            eventAttr = '[sn' + viewModel.$id + eventName + ']';
 
             if (isBubbleEvent(eventName)) {
                 $element.off(eventName, eventAttr, eventFn);
@@ -138,7 +138,7 @@ function removeEvents(viewModel) {
 function compileEvent(eventCompiler, el, evt, val) {
     var template = eventCompiler.template;
 
-    var attr = "sn" + template.viewModel.cid + evt;
+    var attr = "sn" + template.viewModel.$id + evt;
     if (val == 'false') {
         el.setAttribute(attr, val);
     } else {
@@ -200,7 +200,7 @@ export class EventAttributeCompiler {
     update(el, attr, val) {
         if (attr == 'sn-src' && val) {
             var viewModel = this.template.viewModel;
-            if (el.getAttribute('sn' + viewModel.cid + 'load') || el.getAttribute('sn' + viewModel.cid + 'error')) {
+            if (el.getAttribute('sn' + viewModel.$id + 'load') || el.getAttribute('sn' + viewModel.$id + 'error')) {
                 $(el).one('load error', getEventProxy(viewModel));
             }
         }

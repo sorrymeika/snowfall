@@ -5,16 +5,52 @@ import { get } from '../utils/object';
 import { identify } from '../utils/guid';
 import { disconnect } from './methods/connect';
 
-
 interface IObservable {
     get: () => any,
     observe: (cb: (e: any) => any) => any
 }
 
+class ChangeObserver implements IObservable {
+    constructor(model, name) {
+        this.model = model;
+        this.name = name;
+        this.observers = [];
+    }
+
+    get() {
+        return this.model.get(this.name);
+    }
+
+    observe(cb) {
+        this.model.observe(this.name, cb);
+        this.observers.push(cb);
+    }
+
+    unobserve(cb) {
+        this.model.unobserve(this.name, cb);
+
+        const observers = this.observers;
+        for (var i = observers.length - 1; i >= 0; i--) {
+            if (observers[i] === cb) {
+                observers.splice(i, 1);
+            }
+        }
+    }
+
+    destroy() {
+        const observers = this.observers;
+        for (var i = observers.length - 1; i >= 0; i--) {
+            this.model.unobserve(this.name, observers[i]);
+        }
+        this.model = null;
+        this.observers = null;
+    }
+}
+
 export class Observer implements IObservable {
     constructor(data) {
-        this.cid = identify();
-        this.mapper = {};
+        this.$id = identify();
+        this.$mapper = {};
         this.render = this.render.bind(this);
         if (data !== undefined) {
             this.set(data);
@@ -44,7 +80,6 @@ export class Observer implements IObservable {
         } else if (!fn) {
             return !key
                 ? this
-                /* eslint no-use-before-define: "off" */
                 : new ChangeObserver(this, key);
         } else {
             key = parseEventName(key);
@@ -66,8 +101,8 @@ export class Observer implements IObservable {
 
     contains(model) {
         if (model === this) return false;
-        for (var parent = model.parent; parent; parent = parent.parent) {
-            if (parent === this) return true;
+        for (var parents = model.parents; parents; parents = parent.parents) {
+            if (parents.indexOf(this) !== -1) return true;
         }
         return false;
     }
@@ -75,6 +110,10 @@ export class Observer implements IObservable {
     nextTick(cb) {
         nextTick(cb);
         return this;
+    }
+
+    valueOf() {
+        return this.get();
     }
 
     render() {
@@ -92,29 +131,6 @@ export class Observer implements IObservable {
 
         this.trigger('destroy')
             .off();
-    }
-}
-
-export class ChangeObserver extends Observer {
-    constructor(model, name) {
-        super();
-
-        this.model = model;
-        this.name = name;
-    }
-
-    set() { }
-
-    get() {
-        return this.model.get(this.name);
-    }
-
-    observe(cb) {
-        this.model.observe(this.name, cb);
-    }
-
-    unobserve(cb) {
-        this.model.unobserve(this.name, cb);
     }
 }
 

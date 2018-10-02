@@ -1,6 +1,7 @@
 import { isBoolean, isArray, isPlainObject, isThenable, isString } from '../utils/is';
 import { extend, deepClone } from '../utils/clone';
 import { get } from '../utils/object';
+import { asap } from '../utils/asap';
 
 import { Observer } from './Observer';
 import { Collection } from './Collection';
@@ -319,9 +320,16 @@ export class Model extends Observer {
         var getArgs = () => observers.map((item) => {
             return item.get();
         });
-        var compute = () => observer.set(calc(getArgs()));
+        var taskId;
+        var compute = () => {
+            if (taskId) return;
+            taskId = asap(() => {
+                taskId = null;
+                observer.set(calc(getArgs()));
+            });
+        };
         observers.forEach((item) => item.observe(compute));
-        compute();
+        observer.set(calc(getArgs()));
         return observer;
     }
 
