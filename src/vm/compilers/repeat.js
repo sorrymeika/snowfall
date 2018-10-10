@@ -2,7 +2,7 @@ import { $, ELEMENT_NODE, COMMENT_NODE, cloneElement, closestElement, insertElem
 import { value as valueOfObject } from '../../utils/object';
 import { castPath } from '../../utils/castPath';
 import { isNumber } from '../../utils/is';
-import compileExpression from './compileExpression';
+import compileExpression from './compileExpressionNew';
 import { findChildModel } from '../methods/findChildModel';
 import Collection from '../Collection';
 import NodeUpdateResult from './NodeUpdateResult';

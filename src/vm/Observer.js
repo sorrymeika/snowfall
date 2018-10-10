@@ -116,6 +116,10 @@ export class Observer implements IObservable {
         return this.get();
     }
 
+    toString() {
+        return this.get() + '';
+    }
+
     render() {
     }
 

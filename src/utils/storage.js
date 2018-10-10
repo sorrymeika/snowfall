@@ -20,17 +20,6 @@ export function cookie(a, b, c, p) {
 }
 
 export function store(key, value) {
-    if (typeof localStorage === 'undefined') {
-        window.localStorage = {
-            setItem(key, value) {
-                localStorage[key] = value + '';
-            },
-            getItem(key) {
-                return localStorage[key] || null;
-            }
-        };
-    }
-
     if (typeof value === 'undefined')
         return JSON.parse(localStorage.getItem(key));
     if (value === null)
@@ -47,4 +36,18 @@ export function session(key, value) {
         sessionStorage.removeItem(key);
     else
         sessionStorage.setItem(key, JSON.stringify(value));
+}
+
+if (typeof localStorage === 'undefined') {
+    window.localStorage = {
+        setItem(key, value) {
+            localStorage[key] = value + '';
+        },
+        getItem(key) {
+            return localStorage[key] || null;
+        },
+        removeItem(key) {
+            return delete localStorage[key];
+        }
+    };
 }

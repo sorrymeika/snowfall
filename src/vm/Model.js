@@ -94,7 +94,7 @@ export class Model extends Observer {
             query = m[2];
 
             if (isModel(result)) {
-                result = result.$model[attr] || result.$data[attr];
+                result = result.$model[attr] || (result.$data != null ? result.$data[attr] : undefined);
 
                 if (query && isCollection(result)) {
                     return result._(query + search.substr(m.index + m[0].length), def);
@@ -113,8 +113,8 @@ export class Model extends Observer {
     }
 
     get(key) {
-        if (!this.$data) return undefined;
         if (key == null) return this.$data;
+        if (!this.$data) return undefined;
         return get(this.$data, key);
     }
 
@@ -303,7 +303,7 @@ export class Model extends Observer {
     observable(key) {
         if (this.$model[key]) return this.$model[key];
 
-        var value = this.$data[key];
+        var value = this.$data == null ? undefined : this.$data[key];
         return this.model(key).set(value);
     }
 
@@ -384,4 +384,40 @@ function parseChanges(attrs) {
         .filter(name => !!name)
         .map(name => ':' + name)
         .join(' change');
+}
+
+if (process.env.NODE_ENV === 'development') {
+    const model = new Model();
+
+    model.set(null);
+    console.assert(model.attributes === null, 'model.attributes must be null, now is ' + model.attributes);
+    console.assert(model.valueOf() === null, 'model.valueOf() must be null, now is ' + model.valueOf());
+    console.assert(model + '' === 'null', 'model.toString() must be `null`, now is ' + model.toString());
+
+    model.set(true);
+    console.assert(model.attributes === true, 'model.attributes must be true, now is ' + model.attributes);
+    console.assert(model.valueOf() === true, 'model.valueOf() must be true, now is ' + model.valueOf());
+    console.assert(model + '' === 'true', 'model.toString() must be `true`, now is ' + model.toString());
+
+    model.set(false);
+    console.assert(model.attributes === false, 'model.attributes must be false, now is ' + model.attributes);
+    console.assert(model.valueOf() === false, 'model.valueOf() must be false, now is ' + model.valueOf());
+    console.assert(model + '' === 'false', 'model.toString() must be `false`, now is ' + model.toString());
+
+    model.set(undefined);
+    console.assert(model.attributes === undefined, 'model.attributes must be undefined, now is ' + model.attributes);
+    console.assert(model.valueOf() === undefined, 'model.valueOf() must be undefined, now is ' + model.valueOf());
+    console.assert(model + '' === 'undefined', 'model.toString() must be `undefined`, now is ' + model.toString());
+
+    model.set(0);
+    console.assert(model.attributes === 0, 'model.attributes must be 0, now is ' + model.attributes);
+    console.assert(model.valueOf() === 0, 'model.valueOf() must be 0, now is ' + model.valueOf());
+    console.assert(model + '' === '0', 'model.toString() must be `0`, now is ' + model.toString());
+    console.assert(model + 5 === 5, 'model + 5 must be `5`, now is ' + model.toString());
+
+    model.set(1);
+    console.assert(model.attributes === 1, 'model.attributes must be 0, now is ' + model.attributes);
+    console.assert(model.valueOf() === 1, 'model.valueOf() must be 0, now is ' + model.valueOf());
+    console.assert(model + '1' === '11', 'model + "1" must be `11`, now is ' + (model + '1'));
+    console.assert(model + 5 === 6, 'model + 6 must be `6`, now is ' + (model + 5));
 }

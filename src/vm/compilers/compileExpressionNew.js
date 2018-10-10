@@ -108,11 +108,6 @@ export default function compileExpression(input, withBraces) {
     return result;
 }
 
-console.log('compileExp:', compileExpression('as{ /asdf/m.test("bbb"); some.func(); some[pa.a]; var a=1; function (){ var asdf={"obje":"ob"}; }+ \'asdf\'+1234.556+{asdf:"asdf","name": asdf}+"asdf"+true;return 2/asdf}asdf').code);
-
-console.log('compileExp:', compileExpression("multi {['one', 'two', 'three', 'gt_three'][products.length-1] || 'gt_three'}").code);
-
-
 function validVar(c) {
     return c == '.' || c == '$' || c == '_' || (c >= '0' && c <= '9') || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z');
 }
@@ -127,6 +122,18 @@ function isEscape(input, cursor) {
         count++;
     }
     return count != 0 && count % 2 == 1;
+}
+
+// 是否是除法
+function isDivision(input, cursor) {
+    cursor -= 1;
+    while (input[--cursor] == ' ') { }
+
+    // 如果 `/` 前是数字、字符串、变量、属性或方法，说明是除法
+    if (/[\w$)'"\]]/.test(input[cursor])) {
+        return true;
+    }
+    return false;
 }
 
 function matcher(value, cursor) {
@@ -166,10 +173,19 @@ function readExp(input, cursor, endChars) {
                 result += c;
                 cursor++;
             }
-        } else if (c == '/' && /\/(?:(?:\\{2})+|\\\/|[^/])*\/[imguy]*\.(?:test|exec)\(/.test(input.slice(cursor - 1))) {
-            // 读取RegExp
-            result += RegExp.lastMatch;
-            cursor += RegExp.lastMatch.length - 1;
+        } else if (c == '/') {
+            if (input[cursor] === '*') {
+                // 读取comment
+                match = readComment(input, ++cursor);
+                result += match.value;
+                cursor = match.cursor;
+            } else if (!isDivision(input, cursor) && /^\/(?:(?:\\{2})+|\\\/|[^/])*\/[imguy]*(?:\.(?:test|exec)\()?/.test(input.slice(cursor - 1))) {
+                // 读取RegExp
+                result += RegExp.lastMatch;
+                cursor += RegExp.lastMatch.length - 1;
+            } else {
+                result += c;
+            }
         } else if (/[a-zA-Z$]/.test(c)) {
             let varStr = c;
             while (validVar(c = input[cursor])) {
@@ -193,7 +209,7 @@ function readExp(input, cursor, endChars) {
                 // js关键字
                 result += varStr;
             } else {
-                if (input[cursor] == '[') {
+                while (input[cursor] == '[') {
                     match = readExp(input, cursor, ']');
                     cursor = match.cursor;
 
@@ -201,6 +217,11 @@ function readExp(input, cursor, endChars) {
                     varStr += '.~[' + tempVarName + ']';
 
                     tempVars.push(tempVarName + '=' + match.value.slice(1, -1));
+
+                    while (validVar(c = input[cursor])) {
+                        varStr += c;
+                        cursor++;
+                    }
                 }
                 if (input[cursor] == '(') {
                     const lastPoint = varStr.lastIndexOf('.');
@@ -235,6 +256,22 @@ function readString(input, cursor, quot) {
         cursor++;
     }
     throw new Error('string has no end quot!!');
+}
+
+function readComment(input, cursor) {
+    let c;
+    let result = '/*';
+
+    while (cursor < input.length) {
+        c = input[cursor];
+        if (c == '*' && input[cursor + 1] == '/') {
+            return matcher(result + '*/', cursor + 2);
+        } else {
+            result += c;
+        }
+        cursor++;
+    }
+    throw new Error('comment has no end!!');
 }
 
 function readObject(input, cursor) {
@@ -344,4 +381,15 @@ function parseValue(str) {
     }
     code = '((' + code + ')?' + str + ':"")';
     return code.replace(/\.~\[/g, '[');
+}
+
+
+// console.log('compileExp:', compileExpression('"asdf"as{ /*asdf.asfd*/ 3/asdf/m; /asdf/m;/asdf/m.test("asd"); some.func(); some[pa.a]; var a=1; function (){ var asdf={"obje":"ob"}; }+ \'asdf\'+1234.556+{asdf:"asdf","name": asdf}+"asdf"+true;return 2/asdf}asdf').code);
+
+// console.log('compileExp:', compileExpression("multi {['one', 'two', 'three', 'gt_three'][products.length-1] || 'gt_three'}").code);
+
+// console.log('compileExp:', compileExpression("距离{rounds[roundIndex].status[name].name[name][name] ? '结束' : '开始'}还有").code);
+
+if (process.env.NODE_ENV === 'development') {
+    console.assert(compileExpression("距离{rounds[roundIndex].status[name].name[name][name] ? '结束' : '开始'}还有").code == `var $temp_var0=(($data.roundIndex!=null)?$data.roundIndex:""),$temp_var1=(($data.name!=null)?$data.name:""),$temp_var2=(($data.name!=null)?$data.name:""),$temp_var3=(($data.name!=null)?$data.name:"");try{return '距离'+((($data.rounds!=null&&$data.rounds[$temp_var0]!=null&&$data.rounds[$temp_var0].status!=null&&$data.rounds[$temp_var0].status[$temp_var1]!=null&&$data.rounds[$temp_var0].status[$temp_var1].name!=null&&$data.rounds[$temp_var0].status[$temp_var1].name[$temp_var2]!=null&&$data.rounds[$temp_var0].status[$temp_var1].name[$temp_var2][$temp_var3]!=null)?$data.rounds[$temp_var0].status[$temp_var1].name[$temp_var2][$temp_var3]:"") ? '结束' : '开始')+'还有';}catch(e){console.error(e);return '';}`, 'compileExpression error');
 }
