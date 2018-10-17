@@ -39,7 +39,7 @@ export class TemplateCompiler {
         var nodeType = node.nodeType;
 
         if (nodeType == TEXT_NODE) {
-            fid = this.functionCompiler.push(node.nodeValue);
+            fid = this.functionCompiler.push(node.nodeValue, true, true);
             if (fid) {
                 node.snAttributes = ['nodeValue', fid];
                 node.nodeValue = '';
@@ -212,7 +212,10 @@ function updateTextNode(el, val) {
         var node = el;
         var newTails = [];
 
-        val.forEach(function (item) {
+        val.reduce((res, item) => {
+            Array.isArray(item) ? res.push(...item) : res.push(item);
+            return res;
+        }, []).forEach(function (item) {
             var nextSibling = node.nextSibling;
             if (nextSibling !== item) {
                 if (

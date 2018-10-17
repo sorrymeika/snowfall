@@ -37,7 +37,7 @@ function isKeywords(word) {
 let variables;
 let tempVars;
 
-export default function compileExpression(input, withBraces) {
+export default function compileExpression(input, withBraces, retArray = false) {
     if (!input) return;
     if (withBraces == null) withBraces = true;
     if (!withBraces) input = '{' + input + '}';
@@ -50,6 +50,7 @@ export default function compileExpression(input, withBraces) {
     let str = '';
     let exps = '';
     let match;
+    let connector = retArray ? ',' : '+';
 
     variables = [];
     tempVars = [];
@@ -61,7 +62,7 @@ export default function compileExpression(input, withBraces) {
             case '{':
                 hasExp = true;
                 if (str) {
-                    exps += '\'' + str + '\'+';
+                    exps += '\'' + str + '\'' + connector;
                     str = '';
                 }
                 exps += '(';
@@ -72,7 +73,7 @@ export default function compileExpression(input, withBraces) {
                 } else {
                     exps += match.value.slice(0, -1);
                 }
-                exps += ')+';
+                exps += ')' + connector;
                 cursor = match.cursor;
                 break;
             case '\\':
@@ -91,8 +92,11 @@ export default function compileExpression(input, withBraces) {
     }
     if (withBraces && !hasExp) return;
 
-    str && (exps += '\'' + str + '\'');
-    exps = exps.replace(/[+]$/, '');
+    if (str) exps += '\'' + str + '\'';
+    else if (exps.slice(-1) == connector)
+        exps = exps.slice(0, -1);
+        
+    if (retArray) exps = '[' + exps + ']';
 
     if (tempVars.length) {
         code = 'var ' + tempVars.join(',') + ';' + code;

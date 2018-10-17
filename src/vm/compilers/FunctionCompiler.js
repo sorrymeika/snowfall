@@ -25,7 +25,7 @@ export default class FunctionCompiler {
         }
     }
 
-    push(expression, withBraces) {
+    push(expression, withBraces, retArray) {
         if (!expression) return null;
         expression = expression.replace(/^\s+|\s+$/g, '');
         if (!expression) return null;
@@ -36,7 +36,7 @@ export default class FunctionCompiler {
             return expId;
         }
 
-        var res = compileExpression(expression, withBraces);
+        var res = compileExpression(expression, withBraces, retArray);
         if (!res) return null;
 
         expId = vmExpressionsId++;
