@@ -525,7 +525,7 @@ var model = new ViewModel({
 * 工具类
 
 ```js
-import { util } from 'mall-core';
+import { util } from 'snowfall';
 ```
 #### `util.is(PlainObject|EmptyObject|Boolean|Number|String|Object|Array|Yes|No|Thenable)`
 
