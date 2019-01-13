@@ -14,4 +14,6 @@ export * from './regex';
 export * from './string';
 export * from './style';
 export * from './validate';
+export { throttle } from './throttle';
+export { debounce } from './debounce';
 

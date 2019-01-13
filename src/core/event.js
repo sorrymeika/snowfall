@@ -31,7 +31,7 @@ const EventEmitterProto = {
     on(names, callback) {
         if (!callback || !names) return;
 
-        var events = this._events || (this._events = {});
+        var events = this.__events || (this.__events = {});
 
         names.split(/\s+/).forEach((name) => {
             if (name) {
@@ -72,20 +72,20 @@ const EventEmitterProto = {
     },
 
     off(names, callback) {
-        if (!this._events) return this;
+        if (!this.__events) return this;
 
         if (!names) {
-            this._events = null;
+            this.__events = null;
         } else if (!callback) {
             names.split(/\s+/).forEach((name) => {
                 if (name) {
-                    delete this._events[name.toLowerCase()];
+                    delete this.__events[name.toLowerCase()];
                 }
             });
         } else {
             names.split(/\s+/).forEach((name) => {
                 if (name) {
-                    var fns = this._events[name.toLowerCase()];
+                    var fns = this.__events[name.toLowerCase()];
                     if (fns) {
                         for (var i = fns.length - 1; i >= 0; i--) {
                             if (fns[i] === callback || fns[i]._cb === callback) {
@@ -102,10 +102,10 @@ const EventEmitterProto = {
     },
 
     trigger(e, ...args) {
-        if (!this._events || !e) return this;
+        if (!this.__events || !e) return this;
 
         var fns;
-        var events = this._events;
+        var events = this.__events;
         var name = (typeof e === 'string' ? e : e.type).toLowerCase();
         var dotIndex;
         var len;

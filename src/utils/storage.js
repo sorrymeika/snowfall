@@ -28,15 +28,14 @@ export function store(key, value) {
         localStorage.setItem(key, JSON.stringify(value));
 }
 
-export function session(key, value) {
-    if (typeof sessionStorage === 'undefined') return store(key, value);
+export const session = typeof sessionStorage === 'undefined' ? store : function session(key, value) {
     if (typeof value === 'undefined')
         return JSON.parse(sessionStorage.getItem(key));
     if (value === null)
         sessionStorage.removeItem(key);
     else
         sessionStorage.setItem(key, JSON.stringify(value));
-}
+};
 
 if (typeof localStorage === 'undefined') {
     window.localStorage = {

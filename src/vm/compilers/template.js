@@ -39,7 +39,7 @@ export class TemplateCompiler {
         var nodeType = node.nodeType;
 
         if (nodeType == TEXT_NODE) {
-            fid = this.functionCompiler.push(node.nodeValue);
+            fid = this.functionCompiler.push(node.nodeValue, true, true);
             if (fid) {
                 node.snAttributes = ['nodeValue', fid];
                 node.nodeValue = '';
@@ -167,11 +167,11 @@ export class TemplateCompiler {
                                     if (e.type === 'error') {
                                         el.removeAttribute('src');
                                         el.style.opacity = "";
-                                    } else setTimeout(() => {
+                                    } else {
                                         $(el).animate({
                                             opacity: 1
                                         }, 200);
-                                    }, 0);
+                                    }
                                 })
                                 .css({
                                     opacity: .3
@@ -185,7 +185,7 @@ export class TemplateCompiler {
                     }
                     break;
                 default:
-                    val === null ? el.removeAttribute(attrName) : el.setAttribute(attrName, val);
+                    val === null || val === false ? el.removeAttribute(attrName) : el.setAttribute(attrName, val);
                     break;
             }
 
@@ -212,7 +212,10 @@ function updateTextNode(el, val) {
         var node = el;
         var newTails = [];
 
-        val.forEach(function (item) {
+        val.reduce((res, item) => {
+            Array.isArray(item) ? res.push(...item) : res.push(item);
+            return res;
+        }, []).forEach(function (item) {
             var nextSibling = node.nextSibling;
             if (nextSibling !== item) {
                 if (

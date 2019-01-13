@@ -25,7 +25,7 @@ export default class FunctionCompiler {
         }
     }
 
-    push(expression, withBraces) {
+    push(expression, withBraces, retArray) {
         if (!expression) return null;
         expression = expression.replace(/^\s+|\s+$/g, '');
         if (!expression) return null;
@@ -36,7 +36,7 @@ export default class FunctionCompiler {
             return expId;
         }
 
-        var res = compileExpression(expression, withBraces);
+        var res = compileExpression(expression, withBraces, retArray);
         if (!res) return null;
 
         expId = vmExpressionsId++;
@@ -51,13 +51,13 @@ export default class FunctionCompiler {
             srcElement: element,
             util: util,
             $filter: $filter
-        }, this.viewModel.$data);
+        }, this.viewModel.state.data);
 
         if (snData) {
             for (var key in snData) {
                 var val = snData[key];
                 data[key] = isObservable(val)
-                    ? val.$data
+                    ? val.state.data
                     : val;
             }
         }
@@ -69,4 +69,3 @@ export default class FunctionCompiler {
         return this.fns[fid].call(this.viewModel, data);
     }
 }
-

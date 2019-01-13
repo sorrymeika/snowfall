@@ -78,13 +78,13 @@ export class ViewModel extends Model {
 
         this.compiler = new TemplateCompiler(this);
         this.children = children ? [].concat(children) : [];
-        this.eventId = 'sn' + this.$id + 'model';
+        this.eventId = 'sn' + this.state.id + 'model';
         this.repeats = {};
 
         props.el && (this.el = props.el);
         this.el && this.template(this.el);
 
-        this.initialize && this.initialize(this.$data);
+        this.initialize && this.initialize(this.state.data);
     }
 
     template(el) {

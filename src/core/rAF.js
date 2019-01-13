@@ -3,7 +3,7 @@ var rAF = window.requestAnimationFrame;
 var cAF = window.cancelAnimationFrame;
 
 if (!rAF) {
-    var vendors = ['webkit'/*,'moz','o','ms'*/];
+    var vendors = ['webkit'/* ,'moz','o','ms'*/];
     for (var x = 0; !rAF && x < vendors.length; ++x) {
         rAF = window[vendors[x] + 'RequestAnimationFrame'];
         cAF = window[vendors[x] + 'CancelAnimationFrame'] ||

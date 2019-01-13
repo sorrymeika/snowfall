@@ -28,13 +28,17 @@ var RE_SET = codeRegExp("([\\w$]+(?:\\.[\\w$]+)*)\\s*=\\s*((?:(...)|" + RE_STRIN
 
 var events = {};
 
+function getDOMEventSign(viewModel, eventType) {
+    return 'sn' + viewModel.state.id + eventType;
+}
+
 function getEventProxy(viewModel) {
     return events[viewModel.eventId] || (events[viewModel.eventId] = (e) => {
         if (e.type == TRANSITION_END && e.target != e.currentTarget) {
             return;
         }
         var target = e.currentTarget;
-        var eventCode = target.getAttribute('sn' + viewModel.$id + e.type);
+        var eventCode = target.getAttribute(getDOMEventSign(viewModel, e.type));
 
         if (eventCode == 'false') {
             return false;
@@ -93,7 +97,7 @@ export function bindEvents(viewModel, $element) {
         eventName = EVENTS[key];
 
         if (isBubbleEvent(eventName)) {
-            eventAttr = '[sn' + viewModel.$id + eventName + ']';
+            eventAttr = '[' + getDOMEventSign(viewModel, eventName) + ']';
             $element
                 .on(eventName, eventAttr, eventFn)
                 .filter(eventAttr)
@@ -115,7 +119,7 @@ export function unbindEvents(viewModel, $element) {
 
         for (var key in EVENTS) {
             eventName = EVENTS[key];
-            eventAttr = '[sn' + viewModel.$id + eventName + ']';
+            eventAttr = '[' + getDOMEventSign(viewModel, eventName) + ']';
 
             if (isBubbleEvent(eventName)) {
                 $element.off(eventName, eventAttr, eventFn);
@@ -137,17 +141,17 @@ function removeEvents(viewModel) {
 
 function compileEvent(eventCompiler, el, evt, val) {
     var template = eventCompiler.template;
-
-    var attr = "sn" + template.viewModel.$id + evt;
+    var attr = "sn" + template.viewModel.state.id + evt;
     if (val == 'false') {
         el.setAttribute(attr, val);
     } else {
-        var content = val.replace(RE_METHOD, function (match, $1, $2) {
-            return RE_GLOBAL_METHOD.test($1)
-                ? match
-                : ($1 + $2.slice(0, -1) + ($2.length == 2 ? '' : ',') + 'e)');
-        }).replace(RE_SET, 'this.dataOfElement(e.currentTarget,\'$1\',$2)');
-
+        var content = val
+            .replace(RE_METHOD, function (match, $1, $2) {
+                return RE_GLOBAL_METHOD.test($1)
+                    ? match
+                    : ($1 + $2.slice(0, -1) + ($2.length == 2 ? '' : ',') + 'e)');
+            })
+            .replace(RE_SET, 'this.dataOfElement(e.currentTarget,\'$1\',$2)');
         var fid = template.compileToFunction(content, false);
         fid && el.setAttribute(attr, fid);
     }
@@ -200,7 +204,7 @@ export class EventAttributeCompiler {
     update(el, attr, val) {
         if (attr == 'sn-src' && val) {
             var viewModel = this.template.viewModel;
-            if (el.getAttribute('sn' + viewModel.$id + 'load') || el.getAttribute('sn' + viewModel.$id + 'error')) {
+            if (el.getAttribute(getDOMEventSign(viewModel, 'load')) || el.getAttribute(getDOMEventSign(viewModel, 'error'))) {
                 $(el).one('load error', getEventProxy(viewModel));
             }
         }

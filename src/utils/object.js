@@ -175,9 +175,11 @@ export function equals(a, b, eqeqeq = false) {
             }
 
             var key;
-            for (i = keysA.length; i >= 0; i--) {
+            for (i = keysA.length - 1; i >= 0; i--) {
                 key = keysA[i];
-                if (!equals(a[key], b[key], eqeqeq)) {
+                if (
+                    !hasOwnProperty.call(b, key) || !equals(a[key], b[key], eqeqeq)
+                ) {
                     return false;
                 }
             }
@@ -186,11 +188,8 @@ export function equals(a, b, eqeqeq = false) {
             if (a.length !== b.length) {
                 return false;
             }
-            for (i = a.length; i >= 0; i--) {
-                if (
-                    !hasOwnProperty.call(b, keysA[i]) ||
-                    !equals(a[i], b[i], eqeqeq)
-                ) {
+            for (i = a.length - 1; i >= 0; i--) {
+                if (!equals(a[i], b[i], eqeqeq)) {
                     return false;
                 }
             }
@@ -238,6 +237,42 @@ export function contains(parent, obj) {
     return true;
 }
 
+export function set(data, fullPath, value) {
+    const paths = fullPath.replace(/(\[\d+\])/g, '.$1')
+        .split('.')
+        .filter((name) => name);
+
+    let res = data;
+    let prevKey;
+    let prevData;
+
+    for (let i = 0, max = paths.length - 1; i <= max; i++) {
+        let key = paths[i];
+        let isInArray = /^\[(\d+)\]$/.test(key);
+        if (isInArray) {
+            key = Number(RegExp.$1);
+        }
+
+        if (res == null) {
+            res = isInArray ? [] : {};
+            if (prevData) {
+                prevData[prevKey] = res;
+            }
+        }
+
+        prevKey = key;
+        prevData = res;
+
+        if (i === max) {
+            res[key] = value;
+        } else {
+            res = res[key];
+        }
+    }
+
+    return data;
+}
+
 export function get(data, path) {
     if (isString(path)) {
         path = castPath(path);
@@ -253,7 +288,10 @@ export function get(data, path) {
 }
 
 // Note: this method is deprecated
-export { get as value };
+export function value(data, paths) {
+    console.error('`util.value` is deprecated use `util.get` instead!!');
+    return get(data, paths);
+}
 
 export function at(data, paths) {
     let index = -1;

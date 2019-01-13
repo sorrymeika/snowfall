@@ -1,73 +1,116 @@
 import { eventMixin } from '../core/event';
-import { enqueueUpdate, nextTick } from './methods/enqueueUpdate';
-import { updateRefs } from './methods/updateRefs';
 import { get } from '../utils/object';
 import { identify } from '../utils/guid';
+import { enqueueUpdate, nextTick, enqueueInit } from './methods/enqueueUpdate';
+import { updateRefs } from './methods/updateRefs';
 import { disconnect } from './methods/connect';
+
+function parseEventName(attrs) {
+    return attrs
+        ? attrs
+            .split(/\s+/)
+            .filter(name => !!name)
+            .map(name => ':' + name.replace(/\./g, '/'))
+            .join(' datachanged')
+        : '';
+}
 
 interface IObservable {
     get: () => any,
-    observe: (cb: (e: any) => any) => any
+    observe: (cb: (value: any) => any) => boolean,
+    unobserve: (cb: (value: any) => any) => any,
+    destroy: () => never,
+    state: {
+        complete: boolean
+    }
 }
 
 class ChangeObserver implements IObservable {
-    constructor(model, name) {
-        this.model = model;
+    constructor(observer, name) {
+        this.state = { complete: observer.complete };
+        this.observer = observer;
         this.name = name;
-        this.observers = [];
+        this.callbacks = [];
     }
 
     get() {
-        return this.model.get(this.name);
+        return this.observer.get(this.name);
     }
 
     observe(cb) {
-        this.model.observe(this.name, cb);
-        this.observers.push(cb);
+        this.observer.observe(this.name, cb);
+        this.callbacks.push(cb);
     }
 
     unobserve(cb) {
-        this.model.unobserve(this.name, cb);
+        this.observer.unobserve(this.name, cb);
 
-        const observers = this.observers;
-        for (var i = observers.length - 1; i >= 0; i--) {
-            if (observers[i] === cb) {
-                observers.splice(i, 1);
+        const callbacks = this.callbacks;
+        for (var i = callbacks.length - 1; i >= 0; i--) {
+            if (callbacks[i] === cb) {
+                callbacks.splice(i, 1);
             }
         }
     }
 
+    valueOf() {
+        return this.get();
+    }
+
     destroy() {
-        const observers = this.observers;
-        for (var i = observers.length - 1; i >= 0; i--) {
-            this.model.unobserve(this.name, observers[i]);
+        const callbacks = this.callbacks;
+        for (var i = callbacks.length - 1; i >= 0; i--) {
+            this.observer.unobserve(this.name, callbacks[i]);
         }
-        this.model = null;
-        this.observers = null;
+        this.observer = null;
+        this.callbacks = null;
     }
 }
 
+/**
+ * 可观察对象，new之后不会触发observe，每次set若数据变更会触发observe
+ */
 export class Observer implements IObservable {
+
     constructor(data) {
-        this.$id = identify();
-        this.$mapper = {};
+        this.state = {
+            initialized: false,
+            id: identify(),
+            mapper: {},
+            changed: false,
+            dirty: false,
+            complete: false,
+            data: undefined
+        };
         this.render = this.render.bind(this);
+        enqueueInit(this);
         if (data !== undefined) {
             this.set(data);
         }
-        this.initialized = true;
+        this.state.initialized = true;
     }
 
     get(keys) {
-        return keys == null ? get(this.$data, keys) : this.$data;
+        return keys != null ? get(this.state.data, keys) : this.state.data;
+    }
+
+    /**
+     * 无论设置数据和老数据是否相同，都强制触发数据变更事件
+     * @param {any} data 数据
+     */
+    forceSet(data) {
+        this.set(data);
+        enqueueUpdate(this);
+        return this;
     }
 
     set(data) {
-        if (this.$data !== data) {
-            this.$data = data;
+        if (this.state.data !== data) {
+            this.state.data = data;
             enqueueUpdate(this);
             updateRefs(this);
         }
+        return this;
     }
 
     /**
@@ -85,7 +128,9 @@ export class Observer implements IObservable {
             key = parseEventName(key);
         }
 
-        return this.on('datachanged' + key, fn);
+        const cb = () => fn.call(this, this.get());
+        cb._cb = fn;
+        return this.on('datachanged' + key, cb);
     }
 
     unobserve(key, fn) {
@@ -99,9 +144,20 @@ export class Observer implements IObservable {
         return this.off('datachanged' + key, fn);
     }
 
-    contains(model) {
-        if (model === this) return false;
-        for (var parents = model.parents; parents; parents = parent.parents) {
+    compute(compute) {
+        const observer = this;
+        const [result, setObserver] = readonlyObserver(new Observer(compute(observer.get())));
+        const set = function (val) {
+            setObserver(compute(val));
+        };
+        observer.observe(set);
+        result.on('destroy', () => observer.unobserve(set));
+        return result;
+    }
+
+    contains(observer) {
+        if (observer === this) return false;
+        for (var parents = observer.state.parents; parents; parents = parent.state.parents) {
             if (parents.indexOf(this) !== -1) return true;
         }
         return false;
@@ -124,7 +180,7 @@ export class Observer implements IObservable {
     }
 
     destroy() {
-        const parents = this.parents;
+        const parents = this.state.parents;
         if (parents) {
             var i = -1;
             var length = parents.length;
@@ -138,14 +194,21 @@ export class Observer implements IObservable {
     }
 }
 
-function parseEventName(attrs) {
-    return attrs
-        ? attrs
-            .split(/\s+/)
-            .filter(name => !!name)
-            .map(name => ':' + name.replace(/\./g, '/'))
-            .join(' datachanged')
-        : '';
-}
-
 eventMixin(Observer);
+
+export function readonlyObserver(observer) {
+    const set = observer.set.bind(observer);
+    const forceSet = (data) => {
+        set(data);
+        enqueueUpdate(observer);
+    };
+
+    Object.defineProperty(observer, 'set', {
+        writable: false,
+        value: function (val) {
+            throw new Error('can not set readonly observer!');
+        },
+        enumerable: false
+    });
+    return [observer, set, forceSet];
+}

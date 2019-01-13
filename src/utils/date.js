@@ -36,7 +36,7 @@ export function splitTime(timestamp, type = "D") {
 
 /**
  * string 转 date
- * 
+ *
  * @param {String} date
  * @return {Date}
  */
@@ -50,7 +50,7 @@ export function parseDate(date) {
 
 /**
  * date 转 string
- * 
+ *
  * @param {Date|timestamp} d
  * @param {String} f 格式化字符串:yyyy-MM-dd HH:mm:ss_ffff | short | minutes
  * @return {Date}
@@ -83,7 +83,7 @@ export function formatDate(d, f) {
         if (today - date == 86400000) {
             res += '昨天 ';
         } else if (today - date == 0) {
-            //res += '今天';
+            // res += '今天';
         } else {
             res += pad(d.getMonth() + 1) + '-' + pad(d.getDate()) + " ";
         }

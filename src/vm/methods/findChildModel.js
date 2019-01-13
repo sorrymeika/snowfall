@@ -9,7 +9,7 @@ export function findChildModel(model, paths) {
 
     while (++i < length && model) {
         path = paths[i];
-        model = (isCollection(model) ? model : model.$model)[path];
+        model = (isCollection(model) ? model : model.state.innerObservers)[path];
     }
 
     return model;

@@ -16,7 +16,7 @@ export function style(id, css, isReplace) {
             return style;
         }
     }
-    
+
     style = doc.createElement("style");
     style.id = id;
     style.type = "text/css";

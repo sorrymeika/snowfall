@@ -35,8 +35,15 @@ export function isFunction(fn) {
     return typeof fn == 'function';
 }
 
-export function isPlainObject(value) {
-    return value && (value.constructor === Object || value.constructor === undefined);
+export function isPlainObject(obj) {
+    if (typeof obj !== 'object' || obj === null) return false;
+
+    let proto = obj;
+    while (Object.getPrototypeOf(proto) !== null) {
+        proto = Object.getPrototypeOf(proto);
+    }
+
+    return Object.getPrototypeOf(obj) === proto;
 }
 
 export function isEmptyObject(obj) {

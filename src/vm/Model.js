@@ -1,7 +1,6 @@
 import { isBoolean, isArray, isPlainObject, isThenable, isString } from '../utils/is';
 import { extend, deepClone } from '../utils/clone';
 import { get } from '../utils/object';
-import { asap } from '../utils/asap';
 
 import { Observer } from './Observer';
 import { Collection } from './Collection';
@@ -12,6 +11,7 @@ import { enqueueUpdate } from './methods/enqueueUpdate';
 import { blindSet } from './methods/blindSet';
 import { updateRefs } from './methods/updateRefs';
 import { connect, disconnect } from './methods/connect';
+import observable from './observable';
 
 
 const toString = Object.prototype.toString;
@@ -28,32 +28,30 @@ export class Model extends Observer {
         }
     }
 
-    constructor(attributes, key, parent) {
+    constructor(attributes, key?, parent?) {
         super();
-        this.initialized = false;
+        this.state.initialized = false;
+        this.state.innerObservers = {};
 
         if (parent) {
             connect(parent, this, key);
         }
 
-        this.$data = null;
-        this.$model = {};
-        this.dirty = false;
+        const defaultAttributes = this.constructor.defaultAttributes;
+        if (attributes !== undefined || defaultAttributes !== undefined) {
+            attributes = attributes === undefined
+                ? defaultAttributes
+                : isPlainObject(defaultAttributes)
+                    ? Object.assign({}, defaultAttributes, attributes)
+                    : attributes;
 
-        var defaultAttributes = this.constructor.defaultAttributes;
-
-        attributes = attributes === undefined
-            ? defaultAttributes
-            : isPlainObject(defaultAttributes)
-                ? Object.assign({}, defaultAttributes, attributes)
-                : attributes;
-
-        this.set(attributes);
-        this.initialized = true;
+            this.set(attributes);
+        }
+        this.state.initialized = true;
     }
 
     get attributes() {
-        return this.$data;
+        return this.state.data;
     }
 
     set attributes(val) {
@@ -94,7 +92,7 @@ export class Model extends Observer {
             query = m[2];
 
             if (isModel(result)) {
-                result = result.$model[attr] || (result.$data != null ? result.$data[attr] : undefined);
+                result = result.state.innerObservers[attr] || (result.state.data != null ? result.state.data[attr] : undefined);
 
                 if (query && isCollection(result)) {
                     return result._(query + search.substr(m.index + m[0].length), def);
@@ -113,9 +111,10 @@ export class Model extends Observer {
     }
 
     get(key) {
-        if (key == null) return this.$data;
-        if (!this.$data) return undefined;
-        return get(this.$data, key);
+        const { data } = this.state;
+        if (key == null) return data;
+        if (!data) return undefined;
+        return get(data, key);
     }
 
     /**
@@ -146,13 +145,14 @@ export class Model extends Observer {
             keyIsVal = argsLength === 2;
         }
 
-        var keyType = toString.call(key);
-        var keyIsObject = keyType === '[object Object]';
+        const keyType = toString.call(key);
+        const keyIsObject = keyType === '[object Object]';
+        const { state } = this;
 
         if (keyIsVal && (!keyIsObject || !isPlainObject(key))) {
-            if (this._isChange = (this.$data !== key)) {
-                this.$model = {};
-                this.$data = keyIsObject ? Object.create(key) : key;
+            if (state.changed = (state.data !== key)) {
+                state.innerObservers = {};
+                state.data = keyIsObject ? Object.create(key) : key;
                 enqueueUpdate(this);
                 updateRefs(this);
             }
@@ -165,7 +165,7 @@ export class Model extends Observer {
             if (keys.length > 1) {
                 model = blindSet(this, renew, keys, val);
 
-                return (this._isChange = model._isChange)
+                return (state.changed = model.state.changed)
                     ? enqueueUpdate(this)
                     : this;
             } else {
@@ -175,18 +175,18 @@ export class Model extends Observer {
             }
         }
         var isChange = false;
-        var oldAttributes = this.$data;
+        var oldAttributes = state.data;
         var attributes;
 
-        if (this.$data === null || !isPlainObject(this.$data)) {
+        if (oldAttributes === null || !isPlainObject(oldAttributes)) {
             attributes = {};
             isChange = true;
         } else {
-            attributes = Object.assign({}, this.$data);
+            attributes = Object.assign({}, oldAttributes);
         }
 
-        this.$data = attributes;
-        this._setting = true;
+        state.data = attributes;
+        state.setting = true;
 
         if (renew) {
             for (var name in attributes) {
@@ -199,15 +199,15 @@ export class Model extends Observer {
         var changes = [];
         var origin;
         var value;
-        var $model = this.$model;
+        var innerObservers = state.innerObservers;
 
         for (var attr in attrs) {
-            origin = $model[attr] || attributes[attr];
+            origin = innerObservers[attr] || attributes[attr];
             value = attrs[attr];
             if (origin !== value) {
                 if (isObservable(value)) {
-                    $model[attr] = value;
-                    attributes[attr] = value.$data;
+                    innerObservers[attr] = value;
+                    attributes[attr] = value.state.data;
 
                     if (isObservable(origin)) {
                         disconnect(this, origin);
@@ -217,9 +217,9 @@ export class Model extends Observer {
                     isChange = true;
                 } else if (isModel(origin)) {
                     origin.set(renew || renewChild, value);
-                    attributes[attr] = origin.$data;
+                    attributes[attr] = origin.state.data;
 
-                    if (origin._isChange) isChange = true;
+                    if (origin.state.changed) isChange = true;
                 } else if (isCollection(origin)) {
                     if (!isArray(value)) {
                         if (value == null) {
@@ -230,9 +230,9 @@ export class Model extends Observer {
                     }
 
                     origin.set(value);
-                    attributes[attr] = origin.$array;
+                    attributes[attr] = origin.state.data;
 
-                    if (origin._isChange) isChange = true;
+                    if (origin.state.changed) isChange = true;
                 } else if (isThenable(value)) {
                     value.then(((attr, res) => {
                         this.set(renew, attr, res);
@@ -240,8 +240,8 @@ export class Model extends Observer {
                 } else {
                     value = attributeFactory(value, attr, this);
                     if (isObservable(value)) {
-                        $model[attr] = value;
-                        attributes[attr] = value.$data;
+                        innerObservers[attr] = value;
+                        attributes[attr] = value.state.data;
                     } else {
                         changes.push(attr, value, attributes[attr]);
                         attributes[attr] = value;
@@ -254,34 +254,26 @@ export class Model extends Observer {
         if (isChange) {
             enqueueUpdate(this);
             updateRefs(this);
-            if (this._hasOnChangeListener) {
+            if (state.hasOnChangeListener) {
                 for (var i = 0, length = changes.length; i < length; i += 3) {
                     this.trigger("change:" + changes[i], changes[i + 1], changes[i + 2]);
                 }
             }
         } else {
-            this.$data = oldAttributes;
+            state.data = oldAttributes;
         }
-        this._setting = false;
-        this._isChange = isChange;
+        state.setting = false;
+        state.changed = isChange;
 
         if (process.env.NODE_ENV === 'development') {
-            Object.freeze(this.$data);
+            Object.freeze(state.data);
         }
 
         return this;
     }
 
     restore() {
-        if (isPlainObject(this.$data)) {
-            var data = {};
-            for (var key in this.$data) {
-                data[key] = null;
-            }
-            this.set(Object.assign(data, this.constructor.defaultAttributes));
-        } else {
-            this.set(null);
-        }
+        this.attributes = this.constructor.defaultAttributes;
     }
 
     collection(key) {
@@ -290,46 +282,24 @@ export class Model extends Observer {
         var result = this._(key);
         if (result == null) {
             this.set(key, []);
-            return this.$model[key];
+            return this.state.innerObservers[key];
         }
         return result;
     }
 
     model(key) {
-        if (!this.$model[key]) this.set(key, {});
-        return this.$model[key];
+        if (!this.state.innerObservers[key]) this.set(key, {});
+        return this.state.innerObservers[key];
     }
 
     observable(key) {
-        if (this.$model[key]) return this.$model[key];
+        const { innerObservers, data } = this.state;
 
-        var value = this.$data == null ? undefined : this.$data[key];
-        return this.model(key).set(value);
-    }
+        if (innerObservers[key]) return innerObservers[key];
 
-    compute(observers, calc) {
-        observers = observers.map((value) => {
-            if (isString(value)) {
-                return this.observe(value);
-            } else {
-                return value;
-            }
-        });
-
-        var observer = new Observer();
-        var getArgs = () => observers.map((item) => {
-            return item.get();
-        });
-        var taskId;
-        var compute = () => {
-            if (taskId) return;
-            taskId = asap(() => {
-                taskId = null;
-                observer.set(calc(getArgs()));
-            });
-        };
-        observers.forEach((item) => item.observe(compute));
-        observer.set(calc(getArgs()));
+        var value = data == null ? undefined : data[key];
+        const observer = observable(value);
+        this.set(key, observer);
         return observer;
     }
 
@@ -338,7 +308,7 @@ export class Model extends Observer {
      */
     observe(attribute, fn) {
         if (attribute && isString(attribute) && fn) {
-            this._hasOnChangeListener = true;
+            this.state.hasOnChangeListener = true;
             const cb = (e, oldValue, newValue) => {
                 if (e.target === this) {
                     return fn.call(this, e, oldValue, newValue);
@@ -360,13 +330,13 @@ export class Model extends Observer {
     }
 
     toJSON() {
-        return extend(true, {}, this.$data);
+        return extend(true, {}, this.state.data);
     }
 
     destroy() {
         super.destroy();
-        for (var key in this.$model) {
-            var model = this.$model[key];
+        for (var key in this.state.innerObservers) {
+            var model = this.state.innerObservers[key];
             if (model) {
                 disconnect(this, model);
             }

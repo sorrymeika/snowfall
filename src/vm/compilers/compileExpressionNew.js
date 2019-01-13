@@ -37,7 +37,7 @@ function isKeywords(word) {
 let variables;
 let tempVars;
 
-export default function compileExpression(input, withBraces) {
+export default function compileExpression(input, withBraces, retArray = false) {
     if (!input) return;
     if (withBraces == null) withBraces = true;
     if (!withBraces) input = '{' + input + '}';
@@ -50,6 +50,7 @@ export default function compileExpression(input, withBraces) {
     let str = '';
     let exps = '';
     let match;
+    let connector = retArray ? ',' : '+';
 
     variables = [];
     tempVars = [];
@@ -61,7 +62,7 @@ export default function compileExpression(input, withBraces) {
             case '{':
                 hasExp = true;
                 if (str) {
-                    exps += '\'' + str + '\'+';
+                    exps += '\'' + str + '\'' + connector;
                     str = '';
                 }
                 exps += '(';
@@ -72,7 +73,7 @@ export default function compileExpression(input, withBraces) {
                 } else {
                     exps += match.value.slice(0, -1);
                 }
-                exps += ')+';
+                exps += ')' + connector;
                 cursor = match.cursor;
                 break;
             case '\\':
@@ -91,8 +92,11 @@ export default function compileExpression(input, withBraces) {
     }
     if (withBraces && !hasExp) return;
 
-    str && (exps += '\'' + str + '\'');
-    exps = exps.replace(/[+]$/, '');
+    if (str) exps += '\'' + str + '\'';
+    else if (exps.slice(-1) == connector)
+        exps = exps.slice(0, -1);
+
+    if (retArray) exps = '[' + exps + ']';
 
     if (tempVars.length) {
         code = 'var ' + tempVars.join(',') + ';' + code;
@@ -187,6 +191,7 @@ function readExp(input, cursor, endChars) {
                 result += c;
             }
         } else if (/[a-zA-Z$]/.test(c)) {
+            const isProperty = input[cursor - 2] === '.';
             let varStr = c;
             while (validVar(c = input[cursor])) {
                 varStr += c;
@@ -223,7 +228,9 @@ function readExp(input, cursor, endChars) {
                         cursor++;
                     }
                 }
-                if (input[cursor] == '(') {
+                if (isProperty) {
+                    result += varStr;
+                } else if (input[cursor] == '(') {
                     const lastPoint = varStr.lastIndexOf('.');
                     result += lastPoint != -1
                         ? parseValue(varStr.substr(0, lastPoint)) + varStr.substr(lastPoint)
@@ -389,6 +396,14 @@ function parseValue(str) {
 // console.log('compileExp:', compileExpression("multi {['one', 'two', 'three', 'gt_three'][products.length-1] || 'gt_three'}").code);
 
 // console.log('compileExp:', compileExpression("距离{rounds[roundIndex].status[name].name[name][name] ? '结束' : '开始'}还有").code);
+
+// console.log(compileExpression(`{
+//     prd.healthGoldDeductibleAmount == 0
+//         ? (prd.price + '元')
+//         : prd.healthGoldDeductibleAmount == prd.price
+//             ? (prd.healthGoldDeductibleAmount + '金')
+//             : (prd.healthGoldDeductibleAmount + '金' + '+' + (+Math.abs(prd.price - prd.healthGoldDeductibleAmount).toFixed(2)) + '元')
+// }`).code);
 
 if (process.env.NODE_ENV === 'development') {
     console.assert(compileExpression("距离{rounds[roundIndex].status[name].name[name][name] ? '结束' : '开始'}还有").code == `var $temp_var0=(($data.roundIndex!=null)?$data.roundIndex:""),$temp_var1=(($data.name!=null)?$data.name:""),$temp_var2=(($data.name!=null)?$data.name:""),$temp_var3=(($data.name!=null)?$data.name:"");try{return '距离'+((($data.rounds!=null&&$data.rounds[$temp_var0]!=null&&$data.rounds[$temp_var0].status!=null&&$data.rounds[$temp_var0].status[$temp_var1]!=null&&$data.rounds[$temp_var0].status[$temp_var1].name!=null&&$data.rounds[$temp_var0].status[$temp_var1].name[$temp_var2]!=null&&$data.rounds[$temp_var0].status[$temp_var1].name[$temp_var2][$temp_var3]!=null)?$data.rounds[$temp_var0].status[$temp_var1].name[$temp_var2][$temp_var3]:"") ? '结束' : '开始')+'还有';}catch(e){console.error(e);return '';}`, 'compileExpression error');

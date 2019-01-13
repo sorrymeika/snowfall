@@ -1,13 +1,13 @@
 export function connect(parent, child, name) {
-    if (!child.$mapper[parent.$id]) {
-        !child.parents && (child.parents = []);
-        child.parents.push(parent);
+    if (!child.state.mapper[parent.state.id]) {
+        !child.state.parents && (child.state.parents = []);
+        child.state.parents.push(parent);
         setMapper(parent, child, name);
     }
 }
 
 export function disconnect(parent, child) {
-    const parents = child.parents;
+    const parents = child.state.parents;
     if (parents) {
         let i = parents.length;
         while (--i >= 0) {
@@ -21,13 +21,13 @@ export function disconnect(parent, child) {
             }
         }
     }
-    delete child.$mapper[parent.$id];
+    delete child.state.mapper[parent.state.id];
 }
 
 export function setMapper(parent, child, name) {
-    child.$mapper[parent.$id] = name;
+    child.state.mapper[parent.state.id] = name;
 }
 
 export function getMemberName(parent, child) {
-    return child.$mapper[parent.$id];
+    return child.state.mapper[parent.state.id];
 }

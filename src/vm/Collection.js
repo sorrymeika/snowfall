@@ -12,6 +12,49 @@ import { contains } from '../utils/object';
 
 var RE_COLL_QUERY = /\[((?:'(?:\\'|[^'])*'|"(?:\\"|[^"])*"|[^\]])+)\](?:\[([\+\-]?)(\d+)?\])?(?:\.(.*))?/;
 
+function matcher(key, val) {
+    return isString(key)
+        ? (item, i) => item[key] === val
+        : isFunction(key)
+            ? key
+            : (item) => contains(item, key);
+}
+
+function itemFactory(data, index, collection) {
+    return collection.constructor.itemFactory(data, index, collection);
+}
+
+function collectionWillUpdate(collection) {
+    const { state } = collection;
+    if (!state.setting) {
+        state.setting = 1;
+        state.changed = false;
+        state.backup = state.data;
+        state.data = state.data.slice();
+    } else {
+        state.setting++;
+    }
+}
+
+function collectionDidUpdate(collection) {
+    const { state } = collection;
+    if (state.setting && --state.setting == 0) {
+        if (state.changed) {
+            enqueueUpdate(collection);
+            updateRefs(collection);
+
+            if (process.env.NODE_ENV === 'development') {
+                Object.freeze(state.data);
+            }
+        } else if (state.backup) {
+            state.data = state.backup;
+        }
+        state.setting = false;
+        state.backup = null;
+    }
+    return collection;
+}
+
 export class Collection extends Observer {
     static itemFactory(data, index, parent) {
         return new Model(data, index, parent);
@@ -19,24 +62,19 @@ export class Collection extends Observer {
 
     constructor(array, attributeName, parent) {
         super();
-        this.initialized = false;
+        this.state.initialized = false;
+        this.state.data = [];
 
         if (parent) {
             connect(parent, this, attributeName);
         }
-        this.$array = [];
-        this.dirty = false;
 
         if (array && array.length) this.add(array);
-        this.initialized = true;
-    }
-
-    get $data() {
-        return this.$array;
+        this.state.initialized = true;
     }
 
     get array() {
-        return this.$array;
+        return this.state.data;
     }
 
     set array(val) {
@@ -99,7 +137,7 @@ export class Collection extends Observer {
         var index = match[3] ? parseInt(match[3], 10) : operation == '+' ? 0 : undefined;
 
         var test = arrayUtils.query(query);
-        var array = this.$array;
+        var array = this.state.data;
         var results;
         var i = 0;
         var n = array.length;
@@ -152,11 +190,11 @@ export class Collection extends Observer {
     }
 
     size() {
-        return this.$array.length;
+        return this.state.data.length;
     }
 
     map(fn) {
-        return arrayUtils.map(this.$array, fn);
+        return arrayUtils.map(this.state.data, fn);
     }
 
     indexOf(key, val) {
@@ -170,23 +208,23 @@ export class Collection extends Observer {
             }
             return -1;
         } else {
-            return arrayUtils.indexOf(this.$array, key, val);
+            return arrayUtils.indexOf(this.state.data, key, val);
         }
     }
 
     lastIndexOf(key, val) {
         return isModel(key)
             ? Array.prototype.lastIndexOf.call(this, key)
-            : arrayUtils.lastIndexOf(this.$array, key, val);
+            : arrayUtils.lastIndexOf(this.state.data, key, val);
     }
 
     getOrCreate(obj) {
-        var index = arrayUtils.indexOf(this.$array, obj);
+        var index = arrayUtils.indexOf(this.state.data, obj);
         return index !== -1 ? this[index] : this.add(obj);
     }
 
     get(i) {
-        if (i == null) return this.$array;
+        if (i == null) return this.state.data;
         return this[i].get();
     }
 
@@ -216,11 +254,11 @@ export class Collection extends Observer {
                         connect(this, item, i);
 
                         this[i] = item;
-                        this.$array[i] = item.$data;
+                        this.state.data[i] = item.state.data;
                     }
                 } else {
                     model.set(true, item);
-                    if (model._isChange) {
+                    if (model.state.changed) {
                         isChange = true;
                     }
                 }
@@ -228,7 +266,7 @@ export class Collection extends Observer {
                 i++;
             });
 
-            if (isChange) this._isChange = true;
+            if (isChange) this.state.changed = true;
 
             this.add(i == 0 ? array : array.slice(i, array.length));
 
@@ -249,7 +287,6 @@ export class Collection extends Observer {
         var dataLen = array.length;
         var results = [];
 
-
         if (dataLen) {
             for (var i = 0; i < dataLen; i++) {
                 var dataItem = array[i];
@@ -263,14 +300,14 @@ export class Collection extends Observer {
                 }
 
                 this[index] = model;
-                this.$array[index] = model.$data;
+                this.state.data[index] = model.state.data;
 
                 this.length++;
 
                 results.push(model);
             }
 
-            this._isChange = true;
+            this.state.changed = true;
         }
 
         collectionDidUpdate(this);
@@ -288,11 +325,11 @@ export class Collection extends Observer {
      */
     updateAll(data) {
         collectionWillUpdate(this);
-        var array = this.$array;
+        var array = this.state.data;
         for (var i = 0; i < array.length; i++) {
             this[i].set(data);
-            if (this[i]._isChange) {
-                this._isChange = true;
+            if (this[i].state.changed) {
+                this.state.changed = true;
             }
         }
         return collectionDidUpdate(this);
@@ -362,7 +399,7 @@ export class Collection extends Observer {
         var n = arr.length;
 
         for (var i = length - 1; i >= 0; i--) {
-            item = this.$array[i];
+            item = this.state.data[i];
             matched = false;
 
             for (var j = 0; j < n; j++) {
@@ -371,8 +408,8 @@ export class Collection extends Observer {
                 if (arrItem !== undefined) {
                     if (fn.call(this, item, arrItem)) {
                         this[i].set(renewItem, arrItem);
-                        if (this[i]._isChange) {
-                            this._isChange = true;
+                        if (this[i].state.changed) {
+                            this.state.changed = true;
                         }
                         arr[j] = undefined;
                         matched = true;
@@ -443,7 +480,7 @@ export class Collection extends Observer {
             while (--i >= end) {
                 offsetIndex = offset + i;
                 setMapper(this, this[offsetIndex] = this[i], offsetIndex);
-                this.$array[offsetIndex] = this.$array[i];
+                this.state.data[offsetIndex] = this.state.data[i];
             }
             if (offsetIndex >= this.length) {
                 this.length = offsetIndex + 1;
@@ -455,11 +492,11 @@ export class Collection extends Observer {
             while (++i < length) {
                 offsetIndex = offset + i;
                 setMapper(this, this[offsetIndex] = this[i], offsetIndex);
-                this.$array[offsetIndex] = this.$array[i];
+                this.state.data[offsetIndex] = this.state.data[i];
                 if (i >= newLength)
                     delete this[i];
             }
-            this.$array.splice(newLength, this.length - newLength);
+            this.state.data.splice(newLength, this.length - newLength);
             this.length = newLength;
         }
 
@@ -476,10 +513,10 @@ export class Collection extends Observer {
             }
 
             this[offsetIndex] = model;
-            this.$array[offsetIndex] = model.$data;
+            this.state.data[offsetIndex] = model.state.data;
         }
 
-        this._isChange = true;
+        this.state.changed = true;
 
         collectionDidUpdate(this);
 
@@ -495,7 +532,7 @@ export class Collection extends Observer {
     remove(key, val) {
         collectionWillUpdate(this);
 
-        var array = this.$array;
+        var array = this.state.data;
         var fn = isArray(key)
             ? (item, i) => key.indexOf(this[i]) !== -1
             : isObservable(key)
@@ -514,7 +551,7 @@ export class Collection extends Observer {
                 disconnect(this, this[i]);
                 delete this[i];
                 if (index === -1) {
-                    this._isChange = true;
+                    this.state.changed = true;
                     index = i;
                 }
             }
@@ -530,13 +567,13 @@ export class Collection extends Observer {
                     }
                 } else {
                     setMapper(this, this[prevIndex] = this[i], prevIndex);
-                    this.$array[prevIndex] = this.$array[i];
+                    this.state.data[prevIndex] = this.state.data[i];
                     if (i >= newLength)
                         delete this[i];
                     prevIndex++;
                 }
             }
-            this.$array.splice(newLength, this.length - newLength);
+            this.state.data.splice(newLength, this.length - newLength);
             this.length = newLength;
         }
 
@@ -546,15 +583,15 @@ export class Collection extends Observer {
     }
 
     clear() {
-        if (this.length == 0 && this.$array.length == 0) return this;
+        if (this.length == 0 && this.state.data.length == 0) return this;
         for (var i = 0; i < this.length; i++) {
             disconnect(this, this[i]);
             delete this[i];
         }
-        this.$array = [];
+        this.state.data = [];
         this.length = 0;
-        this._setting = 1;
-        this._isChange = true;
+        this.state.setting = 1;
+        this.state.changed = true;
 
         return collectionDidUpdate(this);
     }
@@ -569,30 +606,30 @@ export class Collection extends Observer {
             end = this.length;
         }
 
-        this._inEach = true;
-        this._arrayIsNew = false;
+        this.state.inEach = true;
+        this.state.arrayIsNew = false;
         for (; start < end; start++) {
             if (fn.call(this, this[start], start) === false) break;
         }
 
-        this._inEach = false;
-        if (this._arrayIsNew) {
+        this.state.inEach = false;
+        if (this.state.arrayIsNew) {
             if (process.env.NODE_ENV === 'development') {
-                Object.freeze(this.$array);
+                Object.freeze(this.state.data);
             }
-            this._arrayIsNew = false;
+            this.state.arrayIsNew = false;
         }
 
         return this;
     }
 
     forEach(fn) {
-        this.$array.forEach(fn, this);
+        this.state.data.forEach(fn, this);
     }
 
     find(key, val) {
         var iterate = matcher(key, val);
-        var array = this.$array;
+        var array = this.state.data;
         var length = array.length;
 
         for (var i = 0; i < length; i++) {
@@ -633,7 +670,7 @@ export class Collection extends Observer {
     filter(key, val) {
         var iterate = matcher(key, val);
         var result = [];
-        var array = this.$array;
+        var array = this.state.data;
         var length = array.length;
 
         for (var i = 0; i < length; i++) {
@@ -649,7 +686,7 @@ export class Collection extends Observer {
     }
 
     sort(fn) {
-        var n = this.$array.length;
+        var n = this.state.data.length;
         if (n === 0) return this;
 
         collectionWillUpdate(this);
@@ -659,14 +696,14 @@ export class Collection extends Observer {
             this[i].$i = i;
         }
         Array.prototype.sort.call(this, function (a, b) {
-            return fn(a.$data, b.$data) || a.$i - b.$i;
+            return fn(a.state.data, b.state.data) || a.$i - b.$i;
         });
 
         for (i = 0; i < n; i++) {
-            if (this.$array[i] != this[i].$data) {
-                this.$array[i] = this[i].$data;
+            if (this.state.data[i] != this[i].state.data) {
+                this.state.data[i] = this[i].state.data;
                 setMapper(this, this[i], i);
-                this._isChange = true;
+                this.state.changed = true;
             }
         }
 
@@ -674,49 +711,8 @@ export class Collection extends Observer {
     }
 
     toJSON() {
-        return extend(true, [], this.$array);
+        return extend(true, [], this.state.data);
     }
 }
 
 Collection.prototype.toArray = Collection.prototype.toJSON;
-
-function matcher(key, val) {
-    return isString(key)
-        ? (item, i) => item[key] === val
-        : isFunction(key)
-            ? key
-            : (item) => contains(item, key);
-}
-
-function itemFactory(data, index, collection) {
-    return collection.constructor.itemFactory(data, index, collection);
-}
-
-function collectionWillUpdate(collection) {
-    if (!collection._setting) {
-        collection._setting = 1;
-        collection._isChange = false;
-        collection.__arrayBackup = collection.$array;
-        collection.$array = collection.$array.slice();
-    } else {
-        collection._setting++;
-    }
-}
-
-function collectionDidUpdate(collection) {
-    if (collection._setting && --collection._setting == 0) {
-        if (collection._isChange) {
-            enqueueUpdate(collection);
-            updateRefs(collection);
-
-            if (process.env.NODE_ENV === 'development') {
-                Object.freeze(collection.$array);
-            }
-        } else if (collection.__arrayBackup) {
-            collection.$array = collection.__arrayBackup;
-        }
-        collection._setting = false;
-        collection.__arrayBackup = null;
-    }
-    return collection;
-}

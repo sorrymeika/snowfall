@@ -150,7 +150,7 @@ function updateRepeatView(template, nodeData) {
                 sortFn = valueOfObject(viewModel.delegate, orderBy);
                 break;
             case ORDER_BY_ATTRIBUTES_FUNCTION:
-                sortFn = valueOfObject(viewModel.$data, orderBy);
+                sortFn = valueOfObject(viewModel.state.data, orderBy);
                 break;
             default:
                 // orderBy=['a',true,someFunctionId,false]
@@ -187,7 +187,7 @@ function updateRepeatView(template, nodeData) {
                 };
         }
         sortFn && list.sort(function (a, b) {
-            return sortFn(a.model.$data, b.model.$data);
+            return sortFn(a.model.state.data, b.model.state.data);
         });
     }
 
