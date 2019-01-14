@@ -22,9 +22,11 @@ export class TemplateCompiler {
     compile($element) {
         var viewModel = this.viewModel;
 
-        eachElement($element, (node) => {
-            if (node.snViewModel && node.snViewModel != viewModel) return false;
-            return this.compileNode(node);
+        $element.each((i, root) => {
+            eachElement(root, (node) => {
+                if (node.snViewModel && node.snViewModel != viewModel) return false;
+                return this.compileNode(node, root);
+            });
         });
 
         this.compiler.reduce($element);
@@ -33,9 +35,8 @@ export class TemplateCompiler {
         return $element;
     }
 
-    compileNode(node) {
+    compileNode(node, root) {
         var fid;
-        var componentName;
         var nodeType = node.nodeType;
 
         if (nodeType == TEXT_NODE) {
@@ -47,12 +48,12 @@ export class TemplateCompiler {
             return;
         } else if (nodeType == ELEMENT_NODE) {
             var result = this.nodeCompiler.reduce(node);
-            this.compileAttributes(node, !!componentName);
+            this.compileAttributes(node, root);
             return result;
         }
     }
 
-    compileAttributes(el) {
+    compileAttributes(el, root) {
         var attr;
         var val;
         var attributes = el.attributes;
@@ -73,7 +74,7 @@ export class TemplateCompiler {
                             attributesCompiler.compile(el, attr, val, isExpression(val));
                             break;
                         default:
-                            attributesCompiler.reduce(el, attr, val);
+                            attributesCompiler.reduce(el, attr, val, root);
                             break;
                     }
                 } else {

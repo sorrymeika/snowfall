@@ -11,10 +11,11 @@ export default function createAttributeCompilerFactory(Compilers) {
             this.beforeUpdaters = compilers.filter((compiler) => compiler.beforeUpdate);
         }
 
-        reduce(el, attr, val) {
+        reduce(el, attr, val, root) {
+
             var compilers = this.compilers;
             for (var i = 0; i < compilers.length; i++) {
-                if (compilers[i].compile(el, attr, val)) {
+                if (compilers[i].compile(el, attr, val, root)) {
                     return;
                 }
             }

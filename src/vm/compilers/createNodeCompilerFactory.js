@@ -55,7 +55,7 @@ export default function createNodeCompilerFactory(compilers) {
                 }
             }
 
-            if ((!res || res.shouldUpdateAttributes) || nodeData.nodeType === TEXT_NODE) {
+            if ((!res || res.canUpdateAttributes) || nodeData.nodeType === TEXT_NODE) {
                 this.template.updateAttributes(nodeData);
             }
             return res;

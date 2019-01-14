@@ -4,7 +4,7 @@ export default function NodeUpdateResult(result) {
 }
 
 NodeUpdateResult.prototype = {
-    shouldUpdateAttributes: true,
+    canUpdateAttributes: true,
     isBreak: false,
     isSkipChildNodes: false,
     nextSibling: undefined

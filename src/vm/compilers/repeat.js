@@ -1,4 +1,4 @@
-import { $, ELEMENT_NODE, COMMENT_NODE, cloneElement, closestElement, insertElementAfter } from '../../utils/dom';
+import { ELEMENT_NODE, COMMENT_NODE, cloneElement, closestElement, insertElementAfter } from '../../utils/dom';
 import { value as valueOfObject } from '../../utils/object';
 import { castPath } from '../../utils/castPath';
 import { isNumber } from '../../utils/is';
@@ -6,6 +6,7 @@ import compileExpression from './compileExpressionNew';
 import { findChildModel } from '../methods/findChildModel';
 import Collection from '../Collection';
 import NodeUpdateResult from './NodeUpdateResult';
+import { cloneEvents } from './events';
 
 const SN_REPEAT = 'sn-repeat';
 
@@ -222,11 +223,7 @@ function cloneRepeatElement(viewModel, source, snData) {
         clone.snIsRepeat = true;
 
         if (node.snAttributes) clone.snAttributes = node.snAttributes;
-        if (node.snEvents) {
-            node.snEvents.forEach(function (evt) {
-                $(clone).on(evt, viewModel._handleEvent);
-            });
-        }
+        cloneEvents(viewModel, node, clone);
         if (node.snRepeatCompiler) clone.snRepeatCompiler = node.snRepeatCompiler;
         if (node.snIfSource) {
             var snIfSource = cloneRepeatElement(viewModel, node.snIfSource, snData);

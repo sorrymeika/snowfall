@@ -18,4 +18,4 @@ export function getCompilers() {
         };
     }
     return compilers;
-};
+}

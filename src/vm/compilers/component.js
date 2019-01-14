@@ -6,7 +6,7 @@ const registedComponents = {};
 
 function extendViewModel(options) {
     class Component extends ViewModel {
-    };
+    }
     Object.assign(Component.prototype, options);
     return Component;
 }

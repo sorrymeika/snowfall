@@ -95,6 +95,7 @@ export default function compileExpression(input, withBraces, retArray = false) {
     if (str) exps += '\'' + str + '\'';
     else if (exps.slice(-1) == connector)
         exps = exps.slice(0, -1);
+
     if (retArray) exps = '[' + exps + ']';
 
     if (tempVars.length) {

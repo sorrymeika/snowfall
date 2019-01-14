@@ -5,6 +5,7 @@ import { unbindEvents, bindEvents } from './compilers/events';
 import { TemplateCompiler } from './compilers/template';
 
 import { Model } from './Model';
+import { enqueueUpdate } from './methods/enqueueUpdate';
 
 function compileNewTemplate(viewModel, template) {
     var $element = $(template);
@@ -13,7 +14,8 @@ function compileNewTemplate(viewModel, template) {
     });
 
     viewModel.compiler.compile(viewModel, $element);
-    viewModel.emitChange();
+
+    enqueueUpdate(viewModel);
 
     return $element;
 }
@@ -190,7 +192,7 @@ export class ViewModel extends Model {
 
         childNode.snViewModel = this;
         this.$el.push(childNode);
-        bindEvents(this, $(childNode));
+        bindEvents($(childNode), this);
         (this._outerNodes || (this._outerNodes = [])).push(childNode);
         return childNode;
     }
@@ -201,7 +203,7 @@ export class ViewModel extends Model {
             delete childNode.snViewModel;
             Array.prototype.splice.call(this.$el, index, 1);
             this._outerNodes.splice(this._outerNodes.indexOf(childNode), 1);
-            unbindEvents(this, $(childNode));
+            unbindEvents($(childNode), this);
         }
     }
 
@@ -271,6 +273,9 @@ export class ViewModel extends Model {
 
     destroy() {
         super.destroy();
+        this.$el.each((i, el) => {
+            delete (el.snIfSource || el).snViewModel;
+        });
         this.$el = null;
     }
 }

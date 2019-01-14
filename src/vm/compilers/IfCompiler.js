@@ -121,7 +121,7 @@ export class IfCompiler {
             return new NodeUpdateResult({
                 isSkipChildNodes: true,
                 isBreak: true,
-                shouldUpdateAttributes: false,
+                canUpdateAttributes: false,
                 nextSibling: node.snIfSource
             });
         } else if (node.snIf) {
@@ -141,7 +141,7 @@ export class IfCompiler {
                         return new NodeUpdateResult({
                             isSkipChildNodes: true,
                             isBreak: true,
-                            shouldUpdateAttributes: false,
+                            canUpdateAttributes: false,
                             nextSibling: node.snIf.nextSibling
                         });
                     }

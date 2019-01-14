@@ -105,7 +105,7 @@ export class Observer implements IObservable {
     }
 
     set(data) {
-        if (this.state.data !== data) {
+        if (this.state.changed = (this.state.data !== data)) {
             this.state.data = data;
             enqueueUpdate(this);
             updateRefs(this);

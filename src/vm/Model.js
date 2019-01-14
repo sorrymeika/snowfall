@@ -233,6 +233,11 @@ export class Model extends Observer {
                     attributes[attr] = origin.state.data;
 
                     if (origin.state.changed) isChange = true;
+                } else if (isObservable(origin)) {
+                    origin.set(value);
+                    attributes[attr] = origin.state.data;
+
+                    if (origin.state.changed) isChange = true;
                 } else if (isThenable(value)) {
                     value.then(((attr, res) => {
                         this.set(renew, attr, res);

@@ -1,7 +1,7 @@
 import { $, TRANSITION_END } from '../../utils/dom';
 import { RE_STRING, codeRegExp } from '../../utils/regex';
 
-export const EVENTS = {
+const EVENTS = {
     tap: 'tap',
     longtap: 'longTap',
     'long-tap': 'longTap',
@@ -22,35 +22,19 @@ export const EVENTS = {
     scrollstop: 'scrollStop'
 };
 
-var RE_GLOBAL_METHOD = /^((Math|JSON|Date|util|\$)\.|(encodeURIComponent|decodeURIComponent|parseInt|parseFloat)$)/;
-var RE_METHOD = codeRegExp("\\b((?:this\\.){0,1}[\\.\\w$]+)((...))", 'g', 4);
-var RE_SET = codeRegExp("([\\w$]+(?:\\.[\\w$]+)*)\\s*=\\s*((?:(...)|" + RE_STRING + "|[\\w$][!=]==?|[^;=])+?)(?=;|,|\\)|$)", 'g', 4);
+const EVENT_DELEGATES = ((_delegates) => Object.values(EVENTS).filter((type) => {
+    if (!_delegates[type] && useDelegate(type)) {
+        _delegates[type] = true;
+        return true;
+    }
+}))({});
 
-var events = {};
+const RE_GLOBAL_METHOD = /^((Math|JSON|Date|util|\$)\.|(encodeURIComponent|decodeURIComponent|parseInt|parseFloat)$)/;
+const RE_METHOD = codeRegExp("\\b((?:this\\.){0,1}[\\.\\w$]+)((...))", 'g', 4);
+const RE_SET = codeRegExp("([\\w$]+(?:\\.[\\w$]+)*)\\s*=\\s*((?:(...)|" + RE_STRING + "|[\\w$][!=]==?|[^;=])+?)(?=;|,|\\)|$)", 'g', 4);
+const events = {};
 
-function getDOMEventSign(viewModel, eventType) {
-    return 'sn' + viewModel.state.id + eventType;
-}
-
-function getEventProxy(viewModel) {
-    return events[viewModel.eventId] || (events[viewModel.eventId] = (e) => {
-        if (e.type == TRANSITION_END && e.target != e.currentTarget) {
-            return;
-        }
-        var target = e.currentTarget;
-        var eventCode = target.getAttribute(getDOMEventSign(viewModel, e.type));
-
-        if (eventCode == 'false') {
-            return false;
-        } else if (+eventCode) {
-            var args = viewModel.compiler.getFunctionArg(target, target.snData);
-            args.e = e;
-            return viewModel.compiler.executeFunction(eventCode, args);
-        }
-    });
-}
-
-function isBubbleEvent(eventName) {
+function useDelegate(eventName) {
     switch (eventName) {
         case 'scroll':
         case 'scrollStop':
@@ -60,8 +44,72 @@ function isBubbleEvent(eventName) {
     }
 }
 
-export function bindEvents(viewModel, $element) {
-    $element.on('input change blur', '[' + viewModel.eventId + ']', function (e) {
+function getDOMEventId(viewModel, eventType) {
+    return 'sn' + viewModel.state.id + eventType;
+}
+
+function getEventDelegates(node) {
+    return node.snEventDelegates;
+}
+
+function putEventDelegates(node, type) {
+    const eventDelegates = node.snEventDelegates || (node.snEventDelegates = {});
+    eventDelegates[type] = true;
+}
+
+function getEventProxy(viewModel) {
+    return events[viewModel.eventId] || (events[viewModel.eventId] = (e) => {
+        if (e.type == TRANSITION_END && e.target != e.currentTarget) {
+            return;
+        }
+        var target = e.currentTarget;
+        var eventCode = target.getAttribute(getDOMEventId(viewModel, e.type));
+
+        if (eventCode == 'false') {
+            return false;
+        } else if (+eventCode) {
+            var compiler = viewModel.compiler;
+            var args = compiler.getFunctionArg(target, target.snData);
+            args.e = e;
+            return compiler.executeFunction(eventCode, args);
+        }
+    });
+}
+
+export function bindEvents($element, viewModel) {
+    respondInput($element, viewModel);
+
+    var eventDelegateFn = getEventProxy(viewModel);
+    for (var i = 0; i < EVENT_DELEGATES.length; i++) {
+        var eventType = EVENT_DELEGATES[i];
+        if (useDelegate(eventType)) {
+            var selector = '[' + getDOMEventId(viewModel, eventType) + ']';
+            $element
+                .on(eventType, selector, eventDelegateFn)
+                .filter(selector)
+                .on(eventType, eventDelegateFn);
+        }
+    }
+}
+
+export function unbindEvents($element, viewModel) {
+    $element.off('input change blur', '[' + viewModel.eventId + ']');
+
+    var eventDelegateFn = getEventProxy(viewModel);
+    for (var i = 0; i < EVENT_DELEGATES.length; i++) {
+        var eventType = EVENT_DELEGATES[i];
+        if (useDelegate(eventType)) {
+            var selector = '[' + getDOMEventId(viewModel, eventType) + ']';
+            $element
+                .off(eventType, selector, eventDelegateFn)
+                .filter(selector)
+                .off(eventType, eventDelegateFn);
+        }
+    }
+}
+
+function respondInput($root, viewModel) {
+    $root.on('input change blur', '[' + viewModel.eventId + ']', function (e) {
         var target = e.currentTarget;
 
         switch (e.type) {
@@ -89,62 +137,89 @@ export function bindEvents(viewModel, $element) {
 
         viewModel.dataOfElement(target, target.getAttribute(viewModel.eventId), target.value);
     });
-
-    var eventName;
-    var eventAttr;
-    var eventFn = getEventProxy(viewModel);
-    for (var key in EVENTS) {
-        eventName = EVENTS[key];
-
-        if (isBubbleEvent(eventName)) {
-            eventAttr = '[' + getDOMEventSign(viewModel, eventName) + ']';
-            $element
-                .on(eventName, eventAttr, eventFn)
-                .filter(eventAttr)
-                .on(eventName, eventFn);
-        }
-    }
 }
 
-export function unbindEvents(viewModel, $element) {
-    if ($element) {
-        $element.off('input change blur', '[' + viewModel.eventId + ']')
-            .each(function () {
-                delete this.snViewModel;
+export class EventCompiler {
+    constructor(template) {
+        const viewModel = this.viewModel = template.viewModel;
+        viewModel.on("destroy", () => {
+            delete events[viewModel.eventId];
+            viewModel.$el.each((i, el) => {
+                $(el.snIfSource || el).off('input change blur', '[' + viewModel.eventId + ']');
             });
+        });
+    }
 
-        var eventName;
-        var eventAttr;
-        var eventFn = getEventProxy(viewModel);
+    compile($elements) {
+        const viewModel = this.viewModel;
 
-        for (var key in EVENTS) {
-            eventName = EVENTS[key];
-            eventAttr = '[' + getDOMEventSign(viewModel, eventName) + ']';
-
-            if (isBubbleEvent(eventName)) {
-                $element.off(eventName, eventAttr, eventFn);
-            } else {
-                $element.find(eventAttr)
-                    .off(eventName, eventFn);
+        $elements.each((i, el) => {
+            const $el = $(el);
+            if (el.snRespondInput) {
+                respondInput($el, viewModel);
             }
 
-            $element.filter(eventAttr)
-                .off(eventName, eventFn);
-        }
+            const eventDelegates = getEventDelegates(el);
+            if (eventDelegates) {
+                var eventDelegateFn = getEventProxy(viewModel);
+                Object.keys(eventDelegates)
+                    .forEach((type) => {
+                        const selector = '[' + getDOMEventId(viewModel, type) + ']';
+                        $el.on(type, selector, eventDelegateFn)
+                            .filter(selector)
+                            .on(type, eventDelegateFn);
+
+                        viewModel.on("destroy", () => {
+                            $el.off(type, selector, eventDelegateFn)
+                                .filter(selector)
+                                .off(type, eventDelegateFn);
+                        });
+                    });
+            }
+        });
     }
 }
 
-function removeEvents(viewModel) {
-    unbindEvents(viewModel, viewModel.$el);
-    delete events[viewModel.eventId];
-}
+export class EventAttributeCompiler {
+    constructor(template) {
+        this.template = template;
+        this.eventId = template.viewModel.eventId;
+    }
 
-function compileEvent(eventCompiler, el, evt, val) {
-    var template = eventCompiler.template;
-    var attr = "sn" + template.viewModel.state.id + evt;
-    if (val == 'false') {
-        el.setAttribute(attr, val);
-    } else {
+    compile(el, attr, val, root) {
+        if (attr == 'sn-model') {
+            el.removeAttribute(attr);
+            el.setAttribute(this.eventId, val);
+            root.snRespondInput = true;
+            return true;
+        }
+
+        var eventType = EVENTS[attr.slice(3)];
+        if (eventType) {
+            el.removeAttribute(attr);
+
+            var template = this.template;
+            var viewModel = template.viewModel;
+            var eventId = getDOMEventId(viewModel, eventType);
+            var fid = this.compileEvent(val);
+            if (fid) {
+                el.setAttribute(eventId, fid);
+            }
+
+            if (useDelegate(eventType)) {
+                putEventDelegates(root, eventType);
+            } else {
+                (el.snEvents || (el.snEvents = [])).push(eventType);
+                $(el).on(eventType, getEventProxy(viewModel));
+            }
+
+            return true;
+        }
+    }
+
+    compileEvent(val) {
+        if (val == 'false') return val;
+
         var content = val
             .replace(RE_METHOD, function (match, $1, $2) {
                 return RE_GLOBAL_METHOD.test($1)
@@ -152,62 +227,24 @@ function compileEvent(eventCompiler, el, evt, val) {
                     : ($1 + $2.slice(0, -1) + ($2.length == 2 ? '' : ',') + 'e)');
             })
             .replace(RE_SET, 'this.dataOfElement(e.currentTarget,\'$1\',$2)');
-        var fid = template.compileToFunction(content, false);
-        fid && el.setAttribute(attr, fid);
-    }
-
-    switch (evt) {
-        case 'scroll':
-        case 'scrollStop':
-            (el.snEvents || (el.snEvents = [])).push(evt);
-            $(el).on(evt, getEventProxy(template.viewModel));
-            break;
-        default:
-    }
-}
-
-export class EventCompiler {
-    constructor(template) {
-        this.viewModel = template.viewModel;
-    }
-
-    compile($element) {
-        bindEvents(this.viewModel, $element);
-    }
-}
-
-export class EventNodeCompiler {
-}
-
-export class EventAttributeCompiler {
-    constructor(template) {
-        this.template = template;
-        this.eventId = template.viewModel.eventId;
-        template.viewModel.on("destroy", () => removeEvents(template.viewModel));
-    }
-
-    compile(el, attr, val) {
-        if (attr == 'sn-model') {
-            el.removeAttribute(attr);
-            el.setAttribute(this.eventId, val);
-            return true;
-        }
-
-        var evt = EVENTS[attr.slice(3)];
-        if (evt) {
-            el.removeAttribute(attr);
-            compileEvent(this, el, evt, val);
-            return true;
-        }
+        return this.template.compileToFunction(content, false);
     }
 
     update(el, attr, val) {
         if (attr == 'sn-src' && val) {
             var viewModel = this.template.viewModel;
-            if (el.getAttribute(getDOMEventSign(viewModel, 'load')) || el.getAttribute(getDOMEventSign(viewModel, 'error'))) {
+            if (el.getAttribute(getDOMEventId(viewModel, 'load')) || el.getAttribute(getDOMEventId(viewModel, 'error'))) {
                 $(el).one('load error', getEventProxy(viewModel));
             }
         }
     }
 }
 
+export function cloneEvents(viewModel, node, nodeClone) {
+    const types = node.snEvents;
+    if (types) {
+        for (var i = 0; i < types.length; i++) {
+            $(nodeClone).on(types[i], getEventProxy(viewModel));
+        }
+    }
+}

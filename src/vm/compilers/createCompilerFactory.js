@@ -10,7 +10,7 @@ export default function createCompilerFactory(compilers) {
         reduce($elements) {
             var compilers = this.compilers;
             for (var i = 0; i < compilers.length; i++) {
-                if (compilers[i].compile($elements)) {
+                if (compilers[i].compile($elements) === false) {
                     return;
                 }
             }
