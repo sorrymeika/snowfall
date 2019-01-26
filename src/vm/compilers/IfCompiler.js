@@ -49,7 +49,7 @@ function updateIfSourceElement(viewModel, el) {
             return new NodeUpdateResult({ nextSibling: null });
         }
         return new NodeUpdateResult({
-            isSkipChildNodes: true,
+            ignoreChildNodes: true,
             nextSibling: el.snIf.nextSibling
         });
     } else {
@@ -119,7 +119,7 @@ export class IfCompiler {
 
         if (node.snIfSource) {
             return new NodeUpdateResult({
-                isSkipChildNodes: true,
+                ignoreChildNodes: true,
                 isBreak: true,
                 canUpdateAttributes: false,
                 nextSibling: node.snIfSource
@@ -139,7 +139,7 @@ export class IfCompiler {
                             node.parentNode.removeChild(node);
                         }
                         return new NodeUpdateResult({
-                            isSkipChildNodes: true,
+                            ignoreChildNodes: true,
                             isBreak: true,
                             canUpdateAttributes: false,
                             nextSibling: node.snIf.nextSibling

@@ -12,6 +12,16 @@ export const ELEMENT_NODE = document.ELEMENT_NODE || 1;
 
 const ConstuctorOf$ = $.zepto ? $.zepto.Z : $.fn.constructor;
 
+export function getElementOffsetTop(el) {
+    var parent = el.offsetParent;
+    var top = el.offsetTop;
+    while (parent && parent !== document.body) {
+        top += parent.offsetTop;
+        parent = parent.offsetParent;
+    }
+    return top;
+}
+
 export function insertElementAfter(destElem, elem) {
     if (destElem.nextSibling != elem) {
         destElem.nextSibling
@@ -83,7 +93,7 @@ export function eachElement(el, fn) {
 
     while (el) {
         var res = fn(el);
-        var isSkipChildNodes = res === false || (res && res.isSkipChildNodes);
+        var ignoreChildNodes = res === false || (res && res.ignoreChildNodes);
         var nextSibling = res && res.nextSibling
             ? res.nextSibling
             : firstLoop || (res && res.nextSibling) === null
@@ -92,7 +102,7 @@ export function eachElement(el, fn) {
 
         if (firstLoop) firstLoop = false;
 
-        if (!isSkipChildNodes && el.firstChild) {
+        if (!ignoreChildNodes && el.firstChild) {
             if (nextSibling) {
                 stack.push(nextSibling);
             }

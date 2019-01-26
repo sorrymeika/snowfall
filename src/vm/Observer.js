@@ -4,67 +4,35 @@ import { identify } from '../utils/guid';
 import { enqueueUpdate, nextTick, enqueueInit } from './methods/enqueueUpdate';
 import { updateRefs } from './methods/updateRefs';
 import { disconnect } from './methods/connect';
+import compute from './operators/compute';
 
-function parseEventName(attrs) {
-    return attrs
-        ? attrs
-            .split(/\s+/)
-            .filter(name => !!name)
-            .map(name => ':' + name.replace(/\./g, '/'))
-            .join(' datachanged')
-        : '';
-}
+const resolvedPromise = Promise.resolve();
 
-interface IObservable {
+export interface IObservable {
     get: () => any,
     observe: (cb: (value: any) => any) => boolean,
     unobserve: (cb: (value: any) => any) => any,
     destroy: () => never,
+    compute: (fn: (value: any) => any) => IObservable,
     state: {
-        complete: boolean
+        updated: boolean
     }
 }
 
-class ChangeObserver implements IObservable {
-    constructor(observer, name) {
-        this.state = { complete: observer.complete };
-        this.observer = observer;
-        this.name = name;
-        this.callbacks = [];
-    }
-
-    get() {
-        return this.observer.get(this.name);
-    }
-
-    observe(cb) {
-        this.observer.observe(this.name, cb);
-        this.callbacks.push(cb);
-    }
-
-    unobserve(cb) {
-        this.observer.unobserve(this.name, cb);
-
-        const callbacks = this.callbacks;
-        for (var i = callbacks.length - 1; i >= 0; i--) {
-            if (callbacks[i] === cb) {
-                callbacks.splice(i, 1);
-            }
-        }
-    }
-
-    valueOf() {
-        return this.get();
-    }
-
-    destroy() {
-        const callbacks = this.callbacks;
-        for (var i = callbacks.length - 1; i >= 0; i--) {
-            this.observer.unobserve(this.name, callbacks[i]);
-        }
-        this.observer = null;
-        this.callbacks = null;
-    }
+function next(observer, set, data) {
+    return new Promise((done) => {
+        observer.state.next = (observer.state.next || resolvedPromise).then(() => {
+            return new Promise((resolve) => {
+                nextTick(() => {
+                    set.call(observer, data);
+                    const newData = observer.get();
+                    enqueueUpdate(observer);
+                    resolve();
+                    nextTick(() => done(newData));
+                });
+            });
+        });
+    });
 }
 
 /**
@@ -79,7 +47,7 @@ export class Observer implements IObservable {
             mapper: {},
             changed: false,
             dirty: false,
-            complete: false,
+            updated: false,
             data: undefined
         };
         this.render = this.render.bind(this);
@@ -98,10 +66,8 @@ export class Observer implements IObservable {
      * 无论设置数据和老数据是否相同，都强制触发数据变更事件
      * @param {any} data 数据
      */
-    forceSet(data) {
-        this.set(data);
-        enqueueUpdate(this);
-        return this;
+    next(data) {
+        return next(this, this.set, data);
     }
 
     set(data) {
@@ -116,43 +82,21 @@ export class Observer implements IObservable {
     /**
      * 监听子 Model / Collection 变化
      */
-    observe(key, fn) {
-        if (typeof key === 'function') {
-            fn = key;
-            key = '';
-        } else if (!fn) {
-            return !key
-                ? this
-                : new ChangeObserver(this, key);
-        } else {
-            key = parseEventName(key);
-        }
-
+    observe(fn) {
         const cb = () => fn.call(this, this.get());
         cb._cb = fn;
-        return this.on('datachanged' + key, cb);
+        return this.on('datachanged', cb);
     }
 
-    unobserve(key, fn) {
-        if (typeof key === 'function') {
-            fn = key;
-            key = '';
-        } else {
-            key = parseEventName(key);
-        }
-
-        return this.off('datachanged' + key, fn);
+    unobserve(fn) {
+        return this.off('datachanged', fn);
     }
 
-    compute(compute) {
-        const observer = this;
-        const [result, setObserver] = readonlyObserver(new Observer(compute(observer.get())));
-        const set = function (val) {
-            setObserver(compute(val));
-        };
-        observer.observe(set);
-        result.on('destroy', () => observer.unobserve(set));
-        return result;
+    compute(cacl) {
+        return compute(this.get(), (cb) => {
+            this.observe(cb);
+            return () => this.unobserve(cb);
+        }, cacl);
     }
 
     contains(observer) {
@@ -197,12 +141,7 @@ export class Observer implements IObservable {
 eventMixin(Observer);
 
 export function readonlyObserver(observer) {
-    const set = observer.set.bind(observer);
-    const forceSet = (data) => {
-        set(data);
-        enqueueUpdate(observer);
-    };
-
+    const set = observer.set;
     Object.defineProperty(observer, 'set', {
         writable: false,
         value: function (val) {
@@ -210,5 +149,5 @@ export function readonlyObserver(observer) {
         },
         enumerable: false
     });
-    return [observer, set, forceSet];
+    return [observer, set, next.bind(null, observer, set)];
 }

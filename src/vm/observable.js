@@ -19,21 +19,21 @@ import { Collection } from "./Collection";
  */
 const observable = (initalValue, execute) => {
     if (isFunction(initalValue)) {
-        const [observer, , forceSet] = readonlyObserver(new Observer());
+        const [observer, , next] = readonlyObserver(new Observer());
         const listener = (e) => {
-            forceSet(e);
+            next(e);
         };
         const dispose = initalValue(listener);
         observer.on('destroy', dispose);
         return observer;
     }
     if (isFunction(execute)) {
-        const [observer, set, forceSet] = readonlyObserver(observable(initalValue));
-        execute(observer, set, forceSet);
+        const [observer, set, next] = readonlyObserver(observable(initalValue));
+        execute(observer, set, next);
         return observer;
     }
     if (isObservable(initalValue)) {
-        return observable(initalValue.get());
+        return initalValue.compute((data) => data);
     }
     if (isPlainObject(initalValue)) {
         return new Model(initalValue);
@@ -67,105 +67,10 @@ observable.delay = observable.timer = (msec) => () => observable(undefined, (tim
     timerObserver.on('destroy', clearTimer);
 });
 
-observable.fromPromise = (promise) => () => observable(undefined, (observer, set, forceSet) => {
+observable.fromPromise = (promise) => () => observable(undefined, (observer, set, next) => {
     promise.then((res) => {
-        forceSet(res);
+        next(res);
     });
 });
-
-observable.some = (observers) => {
-    const [observer, setObserver] = readonlyObserver(new Observer());
-    let count = 0;
-    const states = observers.map((item) => {
-        if (item.state.complete) {
-            count++;
-        }
-        return item.get();
-    });
-    const set = (i, val) => {
-        const newStates = [...states];
-        newStates.index = i;
-        newStates.change = val;
-        setObserver(newStates);
-    };
-    const binders = observers.map((item, i) => {
-        const binder = (val) => {
-            states[i] = val;
-            set(i, val);
-        };
-        item.observe(binder);
-        return binder;
-    });
-    observer.on('destroy', () => {
-        observers.forEach((item, i) => item.unobserve(binders[i]));
-    });
-    if (count != 0) {
-        set(-1, null);
-    }
-    return observer;
-};
-
-observable.every = (observers) => {
-    const [observer, setObserver] = readonlyObserver(new Observer());
-    const states = [];
-    const set = (i, val) => {
-        const newStates = [...states];
-        newStates.index = i;
-        newStates.change = val;
-        setObserver(newStates);
-    };
-    let count = 0;
-    const counts = observers.map((item, i) => {
-        if (item.state.complete) {
-            states[i] = item.get();
-            count++;
-            return 0;
-        } else {
-            return 1;
-        }
-    });
-    const binders = observers.map((item, i) => {
-        const binder = (val) => {
-            states[i] = val;
-            if (count === observers.length) {
-                set(i, val);
-            } else {
-                count += counts[i];
-                counts[i] = 0;
-            }
-        };
-        item.observe(binder);
-        return binder;
-    });
-    observer.on('destroy', () => {
-        observers.forEach((item, i) => item.unobserve(binders[i]));
-    });
-    if (count === observers.length) {
-        set(-1, null);
-    }
-    return observer;
-};
-
-observable.once = (observers) => {
-    const observer = observable.every(observers)
-        .observe(() => {
-            observer.destroy();
-        });
-    return observer;
-};
-
-observable.any = (observers) => {
-    const [observer, setObserver] = readonlyObserver(new Observer());
-    const set = (val) => {
-        setObserver(val);
-    };
-    observers.forEach((item) => {
-        item.observe(set);
-    });
-    observer.on('destroy', () => {
-        observers.forEach((item) => item.unobserve(set));
-    });
-    return observer;
-};
 
 export default observable;

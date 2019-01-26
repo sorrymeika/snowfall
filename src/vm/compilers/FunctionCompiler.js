@@ -1,7 +1,7 @@
 import * as util from '../../utils';
 import { isObservable } from '../predicates';
-import * as $filter from '../filter';
-import compileExpression from './compileExpressionNew';
+import * as $filter from './filter';
+import compileExpression from './compileExpression';
 
 var vmExpressionsId = 1;
 var vmExpressionsMap = {};

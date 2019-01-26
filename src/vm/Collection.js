@@ -1,4 +1,4 @@
-import { isArray, isString, isFunction } from '../utils/is';
+import { isArray, isString, isFunction, isNumber } from '../utils/is';
 import * as arrayUtils from '../utils/array';
 import { extend } from '../utils/clone';
 
@@ -9,6 +9,8 @@ import { updateRefs } from './methods/updateRefs';
 import { connect, setMapper, disconnect } from './methods/connect';
 import { isModel, isObservable, isCollection } from './predicates';
 import { contains } from '../utils/object';
+import { observeProp, unobserveProp } from './methods/observeProp';
+import compute from './operators/compute';
 
 var RE_COLL_QUERY = /\[((?:'(?:\\'|[^'])*'|"(?:\\"|[^"])*"|[^\]])+)\](?:\[([\+\-]?)(\d+)?\])?(?:\.(.*))?/;
 
@@ -187,6 +189,30 @@ export class Collection extends Observer {
             }
             return null;
         }
+    }
+
+    observe(attribute, fn) {
+        if (isString(attribute) || isNumber(attribute)) {
+            return observeProp(this, attribute, fn);
+        }
+        return super.observe(attribute);
+    }
+
+    unobserve(attribute, fn) {
+        if (isString(attribute) || isNumber(attribute)) {
+            return unobserveProp(this, attribute, fn);
+        }
+        return super.unobserve(attribute, fn);
+    }
+
+    compute(attribute, cacl) {
+        if (isString(attribute) || isNumber(attribute)) {
+            return compute(this.get(attribute), (cb) => {
+                this.observe(attribute, cb);
+                return () => this.unobserve(attribute, cb);
+            }, cacl);
+        }
+        return super.compute(attribute);
     }
 
     size() {

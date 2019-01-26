@@ -6,6 +6,6 @@ export default function NodeUpdateResult(result) {
 NodeUpdateResult.prototype = {
     canUpdateAttributes: true,
     isBreak: false,
-    isSkipChildNodes: false,
+    ignoreChildNodes: false,
     nextSibling: undefined
 };

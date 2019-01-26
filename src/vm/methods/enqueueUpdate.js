@@ -39,12 +39,52 @@ function asap(cb) {
     return taskId;
 }
 
+let initializers = {};
+let doingInit = false;
 let dirts;
 // 标记脏数据 flags&&flags[model.state.id] === true;
 let flags;
 let flushing = false;
 let changed;
 let nexts;
+
+export function enqueueInit(observer) {
+    initializers[observer.state.id] = observer;
+    if (doingInit) return;
+    doingInit = true;
+    asap(() => {
+        for (let key in initializers) {
+            const item = initializers[key];
+            item.render();
+            bubbleInit(item);
+        }
+        doingInit = false;
+        initializers = {};
+        if (nexts && !flushing && !dirts) {
+            flushNexts();
+        }
+    });
+}
+
+function bubbleInit(target, paths) {
+    const parents = target.state.parents;
+    if (parents) {
+        const length = parents.length;
+        var i = -1;
+        var parent;
+        while (++i < length) {
+            parent = parents[i];
+            var name = getMemberName(parent, target);
+            var nextPaths = paths ? name + '/' + paths : name;
+            if (!initializers[parent.state.id]) {
+                parent.trigger('datachanged:' + nextPaths, {
+                    paths: nextPaths
+                });
+            }
+            bubbleInit(parent, nextPaths);
+        }
+    }
+}
 
 function flushNexts() {
     let j = -1;
@@ -59,6 +99,30 @@ function flushNexts() {
 
     while (++j < fns.length) {
         fns[j]();
+    }
+}
+
+export function enqueueUpdate(dirt) {
+    if (dirt) {
+        const { state } = dirt;
+        if (state.initialized && !state.dirty) {
+            const { id } = state;
+            if (initializers[id]) {
+                delete initializers[id];
+            }
+            state.dirty = true;
+
+            if (!dirts) {
+                dirts = [];
+                flags = {};
+                if (!flushing) asap(flushDirts);
+            }
+
+            if (!flags[id]) {
+                flags[id] = true;
+                dirts.push(dirt);
+            }
+        }
     }
 }
 
@@ -94,6 +158,7 @@ function flushDirts() {
 function emitChange(target) {
     if (!changed[target.state.id]) {
         changed[target.state.id] = true;
+        target.state.updated = true;
         target.render();
         target.trigger('datachanged');
         bubbleChange(target);
@@ -119,50 +184,6 @@ function bubbleChange(target, paths) {
     }
 }
 
-let initializers = {};
-
-export function enqueueUpdate(dirt) {
-    if (dirt) {
-        const { state } = dirt;
-        if (state.initialized && !state.dirty) {
-            const { id } = state;
-            if (initializers[id]) {
-                delete initializers[id];
-            }
-            state.dirty = true;
-            state.complete = state.initialized;
-
-            if (!dirts) {
-                dirts = [];
-                flags = {};
-                if (!flushing) asap(flushDirts);
-            }
-
-            if (!flags[id]) {
-                flags[id] = true;
-                dirts.push(dirt);
-            }
-        }
-    }
-}
-
-let doingInit = false;
-export function enqueueInit(observer) {
-    initializers[observer.state.id] = observer;
-    if (doingInit) return;
-    doingInit = true;
-    asap(() => {
-        for (let key in initializers) {
-            initializers[key].render();
-        }
-        doingInit = false;
-        initializers = {};
-        if (nexts && !flushing && !dirts) {
-            flushNexts();
-        }
-    });
-}
-
 export function nextTick(cb) {
     if (dirts || flushing || doingInit) {
         nexts
@@ -172,5 +193,7 @@ export function nextTick(cb) {
         nexts.push(cb);
     } else {
         cb();
+        return false;
     }
+    return true;
 }

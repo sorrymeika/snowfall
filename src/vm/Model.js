@@ -2,7 +2,7 @@ import { isBoolean, isArray, isPlainObject, isThenable, isString } from '../util
 import { extend, deepClone } from '../utils/clone';
 import { get } from '../utils/object';
 
-import { Observer } from './Observer';
+import { Observer, readonlyObserver } from './Observer';
 import { Collection } from './Collection';
 
 import { isModel, isCollection, isObservable } from './predicates';
@@ -12,6 +12,8 @@ import { blindSet } from './methods/blindSet';
 import { updateRefs } from './methods/updateRefs';
 import { connect, disconnect } from './methods/connect';
 import observable from './observable';
+import { observeProp, unobserveProp } from './methods/observeProp';
+import compute from './operators/compute';
 
 
 const toString = Object.prototype.toString;
@@ -312,22 +314,38 @@ export class Model extends Observer {
      * 监听当前 Model 的属性值变化
      */
     observe(attribute, fn) {
-        if (attribute && isString(attribute) && fn) {
-            this.state.hasOnChangeListener = true;
-            const cb = (e, oldValue, newValue) => {
-                if (e.target === this) {
-                    return fn.call(this, e, oldValue, newValue);
-                }
-            };
-            cb._cb = fn;
-            this.on(parseChanges(attribute), cb);
+        if (isString(attribute)) {
+            if (fn) {
+                this.state.hasOnChangeListener = true;
+                const cb = (e, oldValue, newValue) => {
+                    if (e.target === this) {
+                        return fn.call(this, e, oldValue, newValue);
+                    }
+                };
+                cb._cb = fn;
+                this.on(parseChanges(attribute), cb);
+            }
+            return observeProp(this, attribute, fn);
         }
-        return super.observe(attribute, fn);
+        return super.observe(attribute);
     }
 
     unobserve(attribute, fn) {
-        attribute && isString(attribute) && this.off(parseChanges(attribute), fn);
-        return super.unobserve(attribute, fn);
+        if (isString(attribute)) {
+            this.off(parseChanges(attribute), fn);
+            return unobserveProp(this, attribute, fn);
+        }
+        return super.unobserve(attribute);
+    }
+
+    compute(attribute, cacl) {
+        if (isString(attribute)) {
+            return compute(this.get(attribute), (cb) => {
+                this.observe(attribute, cb);
+                return () => this.unobserve(attribute, cb);
+            }, cacl);
+        }
+        return super.compute(attribute);
     }
 
     getJSON(key) {

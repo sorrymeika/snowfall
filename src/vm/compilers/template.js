@@ -1,8 +1,11 @@
 import { isArray, isNo } from '../../utils/is';
 import { $, TEXT_NODE, ELEMENT_NODE, eachElement, insertElementAfter, fade } from '../../utils/dom';
-
-import { getCompilers } from './compilers';
 import FunctionCompiler from './FunctionCompiler';
+import {
+    createCompilerManager,
+    createNodeHandler,
+    createAttributeHandler
+} from './factories';
 
 function isExpression(val) {
     return val.indexOf("{") !== -1 && val.lastIndexOf("}") !== -1;
@@ -13,10 +16,9 @@ export class TemplateCompiler {
         this.viewModel = viewModel;
         this.functionCompiler = new FunctionCompiler(viewModel);
 
-        var compilers = getCompilers();
-        this.compiler = compilers.createCompiler(this);
-        this.nodeCompiler = compilers.createNodeCompiler(this);
-        this.attributesCompiler = compilers.createAttributeCompiler(this);
+        this.compilerManager = createCompilerManager(this);
+        this.nodeHandler = createNodeHandler(this);
+        this.attributeHandler = createAttributeHandler(this);
     }
 
     compile($element) {
@@ -29,7 +31,7 @@ export class TemplateCompiler {
             });
         });
 
-        this.compiler.reduce($element);
+        this.compilerManager.reduce($element);
         this.functionCompiler.compile();
 
         return $element;
@@ -47,7 +49,7 @@ export class TemplateCompiler {
             }
             return;
         } else if (nodeType == ELEMENT_NODE) {
-            var result = this.nodeCompiler.reduce(node);
+            var result = this.nodeHandler.reduce(node);
             this.compileAttributes(node, root);
             return result;
         }
@@ -57,7 +59,7 @@ export class TemplateCompiler {
         var attr;
         var val;
         var attributes = el.attributes;
-        var attributesCompiler = this.attributesCompiler;
+        var attributeHandler = this.attributeHandler;
 
         for (var i = attributes.length - 1; i >= 0; i--) {
             val = attributes[i].value;
@@ -71,24 +73,24 @@ export class TemplateCompiler {
                         case 'sn-style':
                         case 'sn-css':
                         case 'sn-image':
-                            attributesCompiler.compile(el, attr, val, isExpression(val));
+                            attributeHandler.compile(el, attr, val, isExpression(val));
                             break;
                         default:
-                            attributesCompiler.reduce(el, attr, val, root);
+                            attributeHandler.reduce(el, attr, val, root);
                             break;
                     }
                 } else {
                     if (attr === 'ref' && !isExpression(val)) {
                         val = "{'" + val + "'}";
                     }
-                    attributesCompiler.compile(el, attr, val);
+                    attributeHandler.compile(el, attr, val);
                 }
             }
         }
     }
 
     updateNode(node) {
-        return this.nodeCompiler.update(node);
+        return this.nodeHandler.update(node);
     }
 
     updateAttributes(nodeData) {
@@ -97,13 +99,13 @@ export class TemplateCompiler {
         if (!snAttributes) return;
 
         var snValues = (el.snValues || (el.snValues = []));
-        var attributesCompiler = this.attributesCompiler;
+        var attributeHandler = this.attributeHandler;
 
         for (var i = 0, n = snAttributes.length; i < n; i += 2) {
             var attrName = snAttributes[i];
             var val = this.executeFunction(snAttributes[i + 1], nodeData.data);
 
-            if (attributesCompiler.beforeUpdate(nodeData, attrName, val) === false) {
+            if (attributeHandler.beforeUpdate(nodeData, attrName, val) === false) {
                 continue;
             }
 
@@ -190,7 +192,7 @@ export class TemplateCompiler {
                     break;
             }
 
-            attributesCompiler.update(el, attrName, val);
+            attributeHandler.update(el, attrName, val);
         }
     }
 
