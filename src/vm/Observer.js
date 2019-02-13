@@ -3,10 +3,8 @@ import { get } from '../utils/object';
 import { identify } from '../utils/guid';
 import { enqueueUpdate, nextTick, enqueueInit } from './methods/enqueueUpdate';
 import { updateRefs } from './methods/updateRefs';
-import { disconnect } from './methods/connect';
+import { connect, disconnect } from './methods/connect';
 import compute from './operators/compute';
-
-const resolvedPromise = Promise.resolve();
 
 export interface IObservable {
     get: () => any,
@@ -19,29 +17,14 @@ export interface IObservable {
     }
 }
 
-function next(observer, set, data) {
-    return new Promise((done) => {
-        observer.state.next = (observer.state.next || resolvedPromise).then(() => {
-            return new Promise((resolve) => {
-                nextTick(() => {
-                    set.call(observer, data);
-                    const newData = observer.get();
-                    enqueueUpdate(observer);
-                    resolve();
-                    nextTick(() => done(newData));
-                });
-            });
-        });
-    });
-}
-
 /**
  * 可观察对象，new之后不会触发observe，每次set若数据变更会触发observe
  */
 export class Observer implements IObservable {
 
-    constructor(data) {
+    constructor(data, key?, parent?) {
         this.state = {
+            rendered: false,
             initialized: false,
             id: identify(),
             mapper: {},
@@ -50,6 +33,9 @@ export class Observer implements IObservable {
             updated: false,
             data: undefined
         };
+        if (parent) {
+            connect(parent, this, key);
+        }
         this.render = this.render.bind(this);
         enqueueInit(this);
         if (data !== undefined) {
@@ -62,14 +48,6 @@ export class Observer implements IObservable {
         return keys != null ? get(this.state.data, keys) : this.state.data;
     }
 
-    /**
-     * 无论设置数据和老数据是否相同，都强制触发数据变更事件
-     * @param {any} data 数据
-     */
-    next(data) {
-        return next(this, this.set, data);
-    }
-
     set(data) {
         if (this.state.changed = (this.state.data !== data)) {
             this.state.data = data;
@@ -79,9 +57,6 @@ export class Observer implements IObservable {
         return this;
     }
 
-    /**
-     * 监听子 Model / Collection 变化
-     */
     observe(fn) {
         const cb = () => fn.call(this, this.get());
         cb._cb = fn;
@@ -141,7 +116,7 @@ export class Observer implements IObservable {
 eventMixin(Observer);
 
 export function readonlyObserver(observer) {
-    const set = observer.set;
+    const set = observer.set.bind(observer);
     Object.defineProperty(observer, 'set', {
         writable: false,
         value: function (val) {
@@ -149,5 +124,5 @@ export function readonlyObserver(observer) {
         },
         enumerable: false
     });
-    return [observer, set, next.bind(null, observer, set)];
+    return [observer, set];
 }

@@ -3,6 +3,8 @@ import { isObservable } from "./predicates";
 import { isPlainObject, isFunction } from "../utils";
 import { Model } from "./Model";
 import { Collection } from "./Collection";
+import State from "./State";
+import Emitter from "./Emitter";
 
 /**
  * 可观察对象
@@ -19,17 +21,14 @@ import { Collection } from "./Collection";
  */
 const observable = (initalValue, execute) => {
     if (isFunction(initalValue)) {
-        const [observer, , next] = readonlyObserver(new Observer());
-        const listener = (e) => {
-            next(e);
-        };
-        const dispose = initalValue(listener);
+        const [observer, set] = readonlyObserver(new State());
+        const dispose = initalValue(set);
         observer.on('destroy', dispose);
         return observer;
     }
     if (isFunction(execute)) {
-        const [observer, set, next] = readonlyObserver(observable(initalValue));
-        execute(observer, set, next);
+        const [observer, set] = readonlyObserver(isObservable(initalValue) ? initalValue : observable(initalValue));
+        execute(observer, set);
         return observer;
     }
     if (isObservable(initalValue)) {
@@ -44,7 +43,7 @@ const observable = (initalValue, execute) => {
     }
 };
 
-observable.interval = (msec) => () => observable(0, (countObserver, set) => {
+observable.interval = (msec) => () => observable(new Emitter(0), (countObserver, set) => {
     const id = setInterval(() => {
         set(countObserver + 1);
     }, msec);
@@ -53,7 +52,7 @@ observable.interval = (msec) => () => observable(0, (countObserver, set) => {
     });
 });
 
-observable.delay = observable.timer = (msec) => () => observable(undefined, (timerObserver, set) => {
+observable.delay = observable.timer = (msec) => () => observable(new Emitter(), (timerObserver, set) => {
     let id;
     const clearTimer = () => {
         clearTimeout(id);
@@ -67,9 +66,9 @@ observable.delay = observable.timer = (msec) => () => observable(undefined, (tim
     timerObserver.on('destroy', clearTimer);
 });
 
-observable.fromPromise = (promise) => () => observable(undefined, (observer, set, next) => {
+observable.fromPromise = (promise) => () => observable(new Emitter(), (observer, set) => {
     promise.then((res) => {
-        next(res);
+        set(res);
     });
 });
 

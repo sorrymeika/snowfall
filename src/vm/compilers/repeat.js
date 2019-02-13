@@ -18,6 +18,10 @@ var ORDER_BY_THIS_FUNCTION = 1;
 var ORDER_BY_DELEGATE_FUNCTION = 2;
 var ORDER_BY_ATTRIBUTES_FUNCTION = 3;
 
+// 匹配repeat:
+// 1. item, i in collection|filter:i==1&&contains(item, { name: 1 })|orderBy:date desc, name asc
+// 2. item in collection|filter:this.filter(item, i)|orderBy:this.sort()
+// 3. item in collection|orderBy:{column} asc, name {ascOrDesc}
 var RE_REPEAT = /([\w$]+)(?:\s*,\s*([\w$]+)){0,1}\s+in\s+([\w$]+(?:\.[\w$\(,\)]+|\[\d+\]){0,})(?:\s*\|\s*filter\s*:\s*(.+?)){0,1}(?:\s*\|\s*orderBy:(.+)){0,1}(\s|$)/;
 
 function initCollectionKey(template, compiler, collectionKey) {

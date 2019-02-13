@@ -107,10 +107,7 @@ export function once(observers) {
 };
 
 export function any(observers) {
-    const [observer, setObserver] = readonlyObserver(new Observer());
-    const set = (val) => {
-        setObserver(val);
-    };
+    const [observer, set] = readonlyObserver(new Observer());
     observers.forEach((item) => {
         item.observe(set);
     });

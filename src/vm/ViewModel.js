@@ -256,6 +256,7 @@ export class ViewModel extends Model {
     }
 
     render() {
+        this.state.rendered = true;
         this.viewWillUpdate && this.viewWillUpdate();
 
         var compiler = this.compiler;

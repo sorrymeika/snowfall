@@ -1,10 +1,11 @@
-import { Observer, readonlyObserver } from "../Observer";
+import { readonlyObserver } from "../Observer";
+import State from "../State";
 
-export default function batch(observers, calc) {
-    const [observer, , next] = readonlyObserver(new Observer());
+export default function batch(observers, calc, initialValue) {
+    const [observer, next] = readonlyObserver(new State());
     const getArgs = () => observers.map((item) => item.get());
 
-    let state;
+    let state = initialValue;
     let olds = getArgs();
     const compute = () => {
         const args = getArgs();

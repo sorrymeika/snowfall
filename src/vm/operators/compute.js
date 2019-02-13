@@ -1,13 +1,13 @@
 import { Observer, readonlyObserver } from "../Observer";
 
 export default function compute(initalValue, observers, calc) {
-    if (typeof observers === 'function') {
+    if (typeof observers === 'function' && typeof calc === 'function') {
         const [result, setObserver] = readonlyObserver(new Observer(calc(initalValue)));
         const set = function (val) {
             setObserver(calc(val));
         };
-        const despose = observers(set);
-        result.on('destroy', despose);
+        const dispose = observers(set);
+        result.on('destroy', dispose);
         return result;
     }
     if (!Array.isArray(observers)) {

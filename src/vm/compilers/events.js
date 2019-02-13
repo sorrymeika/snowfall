@@ -27,9 +27,10 @@ const EVENT_DELEGATES = ((_delegates) => Object.values(EVENTS).filter((type) => 
         _delegates[type] = true;
         return true;
     }
+    return false;
 }))({});
 
-const RE_GLOBAL_METHOD = /^((Math|JSON|Date|util|\$)\.|(encodeURIComponent|decodeURIComponent|parseInt|parseFloat)$)/;
+const RE_GLOBAL_METHOD = /^((Math|JSON|Object|Array|Number|Function|String|Symbol|RegExp|document|window|Date|util|\$)(\.|$)|(encodeURIComponent|decodeURIComponent|parseInt|parseFloat)$)/;
 const RE_METHOD = codeRegExp("\\b((?:this\\.){0,1}[\\.\\w$]+)((...))", 'g', 4);
 const RE_SET = codeRegExp("([\\w$]+(?:\\.[\\w$]+)*)\\s*=\\s*((?:(...)|" + RE_STRING + "|[\\w$][!=]==?|[^;=])+?)(?=;|,|\\)|$)", 'g', 4);
 const events = {};
@@ -46,6 +47,10 @@ function useDelegate(eventName) {
 
 function getDOMEventId(viewModel, eventType) {
     return 'sn' + viewModel.state.id + eventType;
+}
+
+function getEventSelector(viewModel, eventType) {
+    return '[' + getDOMEventId(viewModel, eventType) + ']';
 }
 
 function getEventDelegates(node) {
@@ -82,13 +87,12 @@ export function bindEvents($element, viewModel) {
     var eventDelegateFn = getEventProxy(viewModel);
     for (var i = 0; i < EVENT_DELEGATES.length; i++) {
         var eventType = EVENT_DELEGATES[i];
-        if (useDelegate(eventType)) {
-            var selector = '[' + getDOMEventId(viewModel, eventType) + ']';
-            $element
-                .on(eventType, selector, eventDelegateFn)
-                .filter(selector)
-                .on(eventType, eventDelegateFn);
-        }
+        var selector = getEventSelector(viewModel, eventType);
+
+        $element
+            .on(eventType, selector, eventDelegateFn)
+            .filter(selector)
+            .on(eventType, eventDelegateFn);
     }
 }
 
@@ -98,13 +102,12 @@ export function unbindEvents($element, viewModel) {
     var eventDelegateFn = getEventProxy(viewModel);
     for (var i = 0; i < EVENT_DELEGATES.length; i++) {
         var eventType = EVENT_DELEGATES[i];
-        if (useDelegate(eventType)) {
-            var selector = '[' + getDOMEventId(viewModel, eventType) + ']';
-            $element
-                .off(eventType, selector, eventDelegateFn)
-                .filter(selector)
-                .off(eventType, eventDelegateFn);
-        }
+        var selector = getEventSelector(viewModel, eventType);
+
+        $element
+            .off(eventType, selector, eventDelegateFn)
+            .filter(selector)
+            .off(eventType, eventDelegateFn);
     }
 }
 
@@ -142,6 +145,7 @@ function respondInput($root, viewModel) {
 export class EventCompiler {
     constructor(template) {
         const viewModel = this.viewModel = template.viewModel;
+
         viewModel.on("destroy", () => {
             delete events[viewModel.eventId];
             viewModel.$el.each((i, el) => {
@@ -155,16 +159,18 @@ export class EventCompiler {
 
         $elements.each((i, el) => {
             const $el = $(el);
+            const eventDelegates = getEventDelegates(el);
+
             if (el.snRespondInput) {
                 respondInput($el, viewModel);
             }
 
-            const eventDelegates = getEventDelegates(el);
             if (eventDelegates) {
                 var eventDelegateFn = getEventProxy(viewModel);
                 Object.keys(eventDelegates)
                     .forEach((type) => {
-                        const selector = '[' + getDOMEventId(viewModel, type) + ']';
+                        const selector = getEventSelector(viewModel, type);
+
                         $el.on(type, selector, eventDelegateFn)
                             .filter(selector)
                             .on(type, eventDelegateFn);
@@ -191,7 +197,7 @@ export class EventAttributeCompiler {
             el.removeAttribute(attr);
             el.setAttribute(this.eventId, val);
             root.snRespondInput = true;
-            return true;
+            return false;
         }
 
         var eventType = EVENTS[attr.slice(3)];
@@ -202,6 +208,7 @@ export class EventAttributeCompiler {
             var viewModel = template.viewModel;
             var eventId = getDOMEventId(viewModel, eventType);
             var fid = this.compileEvent(val);
+
             if (fid) {
                 el.setAttribute(eventId, fid);
             }
@@ -213,7 +220,7 @@ export class EventAttributeCompiler {
                 $(el).on(eventType, getEventProxy(viewModel));
             }
 
-            return true;
+            return false;
         }
     }
 
@@ -227,6 +234,7 @@ export class EventAttributeCompiler {
                     : ($1 + $2.slice(0, -1) + ($2.length == 2 ? '' : ',') + 'e)');
             })
             .replace(RE_SET, 'this.dataOfElement(e.currentTarget,\'$1\',$2)');
+
         return this.template.compileToFunction(content, false);
     }
 

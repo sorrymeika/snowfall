@@ -22,8 +22,8 @@ function matcher(key, val) {
             : (item) => contains(item, key);
 }
 
-function itemFactory(data, index, collection) {
-    return collection.constructor.itemFactory(data, index, collection);
+function createItem(collection, index, data) {
+    return collection.constructor.createItem(collection, index, data);
 }
 
 function collectionWillUpdate(collection) {
@@ -58,7 +58,7 @@ function collectionDidUpdate(collection) {
 }
 
 export class Collection extends Observer {
-    static itemFactory(data, index, parent) {
+    static createItem(parent, index, data) {
         return new Model(data, index, parent);
     }
 
@@ -224,7 +224,7 @@ export class Collection extends Observer {
     }
 
     indexOf(key, val) {
-        if (isModel(key)) {
+        if (isObservable(key)) {
             var length = this.length;
             var i = -1;
             while (++i < length) {
@@ -239,7 +239,7 @@ export class Collection extends Observer {
     }
 
     lastIndexOf(key, val) {
-        return isModel(key)
+        return isObservable(key)
             ? Array.prototype.lastIndexOf.call(this, key)
             : arrayUtils.lastIndexOf(this.state.data, key, val);
     }
@@ -273,7 +273,7 @@ export class Collection extends Observer {
             this.each(function (model) {
                 item = array[i];
 
-                if (isModel(item)) {
+                if (isObservable(item)) {
                     if (item != model) {
                         isChange = true;
                         disconnect(this, model);
@@ -283,7 +283,10 @@ export class Collection extends Observer {
                         this.state.data[i] = item.state.data;
                     }
                 } else {
-                    model.set(true, item);
+                    isModel(model)
+                        ? model.set(true, item)
+                        : model.set(item);
+
                     if (model.state.changed) {
                         isChange = true;
                     }
@@ -318,11 +321,11 @@ export class Collection extends Observer {
                 var dataItem = array[i];
                 var index = this.length;
 
-                if (isModel(dataItem)) {
+                if (isObservable(dataItem)) {
                     model = dataItem;
                     connect(this, dataItem, index);
                 } else {
-                    model = itemFactory(dataItem, index, this);
+                    model = createItem(this, index, dataItem);
                 }
 
                 this[index] = model;
@@ -531,11 +534,11 @@ export class Collection extends Observer {
             item = array[i];
             offsetIndex = start + i;
 
-            if (isModel(item)) {
+            if (isObservable(item)) {
                 model = item;
                 connect(this, model, offsetIndex);
             } else {
-                model = itemFactory(item, offsetIndex, this);
+                model = createItem(this, offsetIndex, item);
             }
 
             this[offsetIndex] = model;

@@ -1,6 +1,6 @@
+import { Observer } from "./Observer";
 import { Model } from "./Model";
 import { Collection } from "./Collection";
-import { Observer } from "./Observer";
 
 export function isObserver(observer) {
     return observer && observer.constructor === Observer;

@@ -10,7 +10,7 @@ export default class AttributeHandler {
     reduce(el, attr, val, root) {
         var compilers = this.compilers;
         for (var i = 0; i < compilers.length; i++) {
-            if (compilers[i].compile(el, attr, val, root)) {
+            if (compilers[i].compile(el, attr, val, root) === false) {
                 return;
             }
         }

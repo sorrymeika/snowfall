@@ -19,31 +19,42 @@ export function isUndefined(val) {
     return val === undefined;
 }
 
+export function isNil(val) {
+    return val == null;
+}
+
 export function isString(str) {
-    return typeof str == 'string' || toString.call(str) == "[object String]";
+    return typeof str === 'string' || toString.call(str) == "[object String]";
 }
 
 export function isNumber(str) {
-    return typeof str == 'number' || toString.call(str) == "[object Number]";
+    return typeof str === 'number' || toString.call(str) == "[object Number]";
 }
 
 export function isBoolean(str) {
-    return typeof str == 'boolean' || toString.call(str) == "[object Boolean]";
+    return str === true || str === false;
 }
 
 export function isFunction(fn) {
-    return typeof fn == 'function';
+    return typeof fn === 'function';
 }
+
+// 来自redux，性能差
+// export function isPlainObject2(obj) {
+//     if (typeof obj !== 'object' || obj === null) return false;
+
+//     let proto = obj;
+//     while (Object.getPrototypeOf(proto) !== null) {
+//         proto = Object.getPrototypeOf(proto);
+//     }
+
+//     return Object.getPrototypeOf(obj) === proto;
+// }
 
 export function isPlainObject(obj) {
     if (typeof obj !== 'object' || obj === null) return false;
 
-    let proto = obj;
-    while (Object.getPrototypeOf(proto) !== null) {
-        proto = Object.getPrototypeOf(proto);
-    }
-
-    return Object.getPrototypeOf(obj) === proto;
+    return Object.getPrototypeOf(obj) === Object.prototype;
 }
 
 export function isEmptyObject(obj) {

@@ -2,7 +2,7 @@ import { isBoolean, isArray, isPlainObject, isThenable, isString } from '../util
 import { extend, deepClone } from '../utils/clone';
 import { get } from '../utils/object';
 
-import { Observer, readonlyObserver } from './Observer';
+import { Observer } from './Observer';
 import { Collection } from './Collection';
 
 import { isModel, isCollection, isObservable } from './predicates';
@@ -14,13 +14,13 @@ import { connect, disconnect } from './methods/connect';
 import observable from './observable';
 import { observeProp, unobserveProp } from './methods/observeProp';
 import compute from './operators/compute';
-
+import { source } from './attributes/symbols';
 
 const toString = Object.prototype.toString;
 const RE_QUERY = /(?:^|\.)([_a-zA-Z0-9]+)(\[(?:'(?:\\'|[^'])*'|"(?:\\"|[^"])*"|[^\]])+\](?:\[[\+\-]?\d*\])?)?/g;
 
 export class Model extends Observer {
-    static attributeFactory(value, name, parent) {
+    static createAttribute(parent, name, value) {
         if (isPlainObject(value)) {
             return new Model(value, name, parent);
         } else if (isArray(value)) {
@@ -31,6 +31,11 @@ export class Model extends Observer {
     }
 
     constructor(attributes, key?, parent?) {
+        if (process.env.NODE_ENV !== 'production') {
+            if (attributes && (attributes[source] || attributes instanceof Observer)) {
+                throw new Error('attributes can not be Observer!');
+            }
+        }
         super();
         this.state.initialized = false;
         this.state.innerObservers = {};
@@ -206,6 +211,9 @@ export class Model extends Observer {
         for (var attr in attrs) {
             origin = innerObservers[attr] || attributes[attr];
             value = attrs[attr];
+            if (value && value[source]) {
+                value = value[source];
+            }
             if (origin !== value) {
                 if (isObservable(value)) {
                     innerObservers[attr] = value;
@@ -245,7 +253,7 @@ export class Model extends Observer {
                         this.set(renew, attr, res);
                     }).bind(this, attr));
                 } else {
-                    value = attributeFactory(value, attr, this);
+                    value = createAttribute(this, attr, value);
                     if (isObservable(value)) {
                         innerObservers[attr] = value;
                         attributes[attr] = value.state.data;
@@ -367,8 +375,8 @@ export class Model extends Observer {
     }
 }
 
-function attributeFactory(value, name, parent) {
-    return parent.constructor.attributeFactory(value, name, parent);
+function createAttribute(model, name, value) {
+    return model.constructor.createAttribute(model, name, value);
 }
 
 function parseChanges(attrs) {

@@ -21,6 +21,7 @@ if (process.env.NODE_ENV === 'test') {
 }
 
 function flushCallbacks() {
+    // console.time('flushCallbacks');
     var cbs = callbacks;
     taskId = null;
     callbacks = [];
@@ -28,6 +29,7 @@ function flushCallbacks() {
     for (var i = 0; i < cbs.length; i++) {
         cbs[i]();
     }
+    // console.timeEnd('flushCallbacks');
 }
 
 function asap(cb) {
@@ -55,7 +57,10 @@ export function enqueueInit(observer) {
     asap(() => {
         for (let key in initializers) {
             const item = initializers[key];
-            item.render();
+            if (!item.state.rendered) {
+                item.state.rendered = true;
+                item.render();
+            }
             bubbleInit(item);
         }
         doingInit = false;
@@ -103,25 +108,25 @@ function flushNexts() {
 }
 
 export function enqueueUpdate(dirt) {
-    if (dirt) {
-        const { state } = dirt;
-        if (state.initialized && !state.dirty) {
-            const { id } = state;
-            if (initializers[id]) {
-                delete initializers[id];
-            }
-            state.dirty = true;
+    const { state } = dirt;
+    state.rendered = false;
 
-            if (!dirts) {
-                dirts = [];
-                flags = {};
-                if (!flushing) asap(flushDirts);
-            }
+    if (state.initialized && !state.dirty) {
+        const { id } = state;
+        if (initializers[id]) {
+            delete initializers[id];
+        }
+        state.dirty = true;
 
-            if (!flags[id]) {
-                flags[id] = true;
-                dirts.push(dirt);
-            }
+        if (!dirts) {
+            dirts = [];
+            flags = {};
+            if (!flushing) asap(flushDirts);
+        }
+
+        if (!flags[id]) {
+            flags[id] = true;
+            dirts.push(dirt);
         }
     }
 }
@@ -159,7 +164,17 @@ function emitChange(target) {
     if (!changed[target.state.id]) {
         changed[target.state.id] = true;
         target.state.updated = true;
-        target.render();
+        if (!target.state.rendered) {
+            target.state.rendered = true;
+
+            const prefStart = performance.now();
+            // console.time('render');
+            target.render();
+            // console.timeEnd('render');
+            if (performance.now() - prefStart > 5) {
+                console.log(target);
+            }
+        }
         target.trigger('datachanged');
         bubbleChange(target);
     }
@@ -182,6 +197,19 @@ function bubbleChange(target, paths) {
             !paths && emitChange(parent);
         }
     }
+}
+
+export function emitUpdate(target) {
+    const { state } = target;
+    if (state.initialized) {
+        const { id } = state;
+        if (initializers[id]) {
+            delete initializers[id];
+        }
+    }
+    changed = {};
+    emitChange(target);
+    changed = null;
 }
 
 export function nextTick(cb) {
