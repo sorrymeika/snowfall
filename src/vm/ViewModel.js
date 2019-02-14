@@ -274,9 +274,12 @@ export class ViewModel extends Model {
 
     destroy() {
         super.destroy();
-        this.$el.each((i, el) => {
-            delete (el.snIfSource || el).snViewModel;
-        });
-        this.$el = null;
+
+        if (this.$el) {
+            this.$el.each((i, el) => {
+                delete (el.snIfSource || el).snViewModel;
+            });
+            this.$el = null;
+        }
     }
 }

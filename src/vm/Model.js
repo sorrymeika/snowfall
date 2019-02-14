@@ -366,11 +366,15 @@ export class Model extends Observer {
 
     destroy() {
         super.destroy();
-        for (var key in this.state.innerObservers) {
-            var model = this.state.innerObservers[key];
-            if (model) {
-                disconnect(this, model);
+
+        if (this.state.innerObservers) {
+            for (var key in this.state.innerObservers) {
+                var model = this.state.innerObservers[key];
+                if (model) {
+                    disconnect(this, model);
+                }
             }
+            this.state.innerObservers = null;
         }
     }
 }

@@ -11,6 +11,7 @@ import { isModel, isObservable, isCollection } from './predicates';
 import { contains } from '../utils/object';
 import { observeProp, unobserveProp } from './methods/observeProp';
 import compute from './operators/compute';
+import { source } from './attributes/symbols';
 
 var RE_COLL_QUERY = /\[((?:'(?:\\'|[^'])*'|"(?:\\"|[^"])*"|[^\]])+)\](?:\[([\+\-]?)(\d+)?\])?(?:\.(.*))?/;
 
@@ -267,13 +268,12 @@ export class Collection extends Observer {
             }
 
             var i = 0;
-            var item;
             var isChange = false;
 
             this.each(function (model) {
-                item = array[i];
+                var item = array[i];
 
-                if (isObservable(item)) {
+                if ((item[source] && (item = item[source])) || isObservable(item)) {
                     if (item != model) {
                         isChange = true;
                         disconnect(this, model);
@@ -321,7 +321,7 @@ export class Collection extends Observer {
                 var dataItem = array[i];
                 var index = this.length;
 
-                if (isObservable(dataItem)) {
+                if ((dataItem[source] && (dataItem = dataItem[source])) || isObservable(dataItem)) {
                     model = dataItem;
                     connect(this, dataItem, index);
                 } else {
@@ -534,7 +534,7 @@ export class Collection extends Observer {
             item = array[i];
             offsetIndex = start + i;
 
-            if (isObservable(item)) {
+            if ((item[source] && (item = item[source])) || isObservable(item)) {
                 model = item;
                 connect(this, model, offsetIndex);
             } else {

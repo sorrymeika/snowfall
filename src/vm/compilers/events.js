@@ -148,9 +148,11 @@ export class EventCompiler {
 
         viewModel.on("destroy", () => {
             delete events[viewModel.eventId];
-            viewModel.$el.each((i, el) => {
-                $(el.snIfSource || el).off('input change blur', '[' + viewModel.eventId + ']');
-            });
+            if (viewModel.$el) {
+                viewModel.$el.each((i, el) => {
+                    $(el.snIfSource || el).off('input change blur', '[' + viewModel.eventId + ']');
+                });
+            }
         });
     }
 

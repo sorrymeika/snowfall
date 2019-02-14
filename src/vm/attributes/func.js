@@ -13,7 +13,9 @@ export function func(target, name, descriptor) {
             const observer = target[source];
             if (!this[OBSERVER_FUNC_INITED]) {
                 this[OBSERVER_FUNC_INITED] = true;
-                observer.set(name, descriptor.value);
+                observer.set(name, descriptor.value.prototype
+                    ? descriptor.value.bind(this)
+                    : descriptor.value);
             }
             subscribe(observer, name);
             return observer.get(name);
@@ -26,7 +28,9 @@ export function func(target, name, descriptor) {
             if (!this[OBSERVER_FUNC_INITED]) {
                 this[OBSERVER_FUNC_INITED] = true;
             }
-            observer.set(name, val);
+            observer.set(name, val.prototype
+                ? val.bind(this)
+                : val);
         }
     };
 };

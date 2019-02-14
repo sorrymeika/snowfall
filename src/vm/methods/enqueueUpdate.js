@@ -167,12 +167,14 @@ function emitChange(target) {
         if (!target.state.rendered) {
             target.state.rendered = true;
 
-            const prefStart = performance.now();
-            // console.time('render');
-            target.render();
-            // console.timeEnd('render');
-            if (performance.now() - prefStart > 5) {
-                console.log(target);
+            if (process.env.NODE_ENV === 'development') {
+                const prefStart = performance.now();
+                target.render();
+                if (performance.now() - prefStart > 15) {
+                    console.warn('slow render:', performance.now() - prefStart, target);
+                }
+            } else {
+                target.render();
             }
         }
         target.trigger('datachanged');

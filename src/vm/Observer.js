@@ -99,17 +99,21 @@ export class Observer implements IObservable {
     }
 
     destroy() {
-        const parents = this.state.parents;
-        if (parents) {
-            var i = -1;
-            var length = parents.length;
-            while (++i < length) {
-                disconnect(parents[i], this);
-            }
-        }
+        if (!this.state.isDestroyed) {
+            this.state.isDestroyed = true;
 
-        this.trigger('destroy')
-            .off();
+            const parents = this.state.parents;
+            if (parents) {
+                var i = -1;
+                var length = parents.length;
+                while (++i < length) {
+                    disconnect(parents[i], this);
+                }
+            }
+
+            this.trigger('destroy')
+                .off();
+        }
     }
 }
 

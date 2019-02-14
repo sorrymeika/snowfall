@@ -111,11 +111,14 @@ export default class Dictionary extends Observer {
     destroy() {
         super.destroy();
 
-        const { data } = this.state;
-        for (let key in data) {
-            if (isObservable(data[key])) {
-                disconnect(this, data[key]);
+        if (this.state) {
+            const { data } = this.state;
+            for (let key in data) {
+                if (isObservable(data[key])) {
+                    disconnect(this, data[key]);
+                }
             }
+            this.state = null;
         }
     }
 }
