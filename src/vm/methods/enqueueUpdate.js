@@ -58,9 +58,9 @@ export function enqueueInit(observer) {
         for (let key in initializers) {
             const item = initializers[key];
             if (!item.state.rendered) {
-                item.state.rendered = true;
                 item.render();
             }
+            item.state.rendered = false;
             bubbleInit(item);
         }
         doingInit = false;
@@ -109,7 +109,6 @@ function flushNexts() {
 
 export function enqueueUpdate(dirt) {
     const { state } = dirt;
-    state.rendered = false;
 
     if (state.initialized && !state.dirty) {
         const { id } = state;
@@ -165,8 +164,6 @@ function emitChange(target) {
         changed[target.state.id] = true;
         target.state.updated = true;
         if (!target.state.rendered) {
-            target.state.rendered = true;
-
             if (process.env.NODE_ENV === 'development') {
                 const prefStart = performance.now();
                 target.render();
@@ -177,6 +174,7 @@ function emitChange(target) {
                 target.render();
             }
         }
+        target.state.rendered = false;
         target.trigger('datachanged');
         bubbleChange(target);
     }
