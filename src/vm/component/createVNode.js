@@ -2,13 +2,11 @@ import { readExpression } from "./compile";
 
 export type IVNode = {
     type: string,
+    tagName: string,
     props: [],
     attributes: [],
     parent: IVNode,
-    children: IVNode[] | string,
-    next: (prev: IVNode) => IVNode,
-    nextSibling: IVNode,
-    prevSibling: IVNode
+    children: IVNode[] | string
 }
 
 // 匹配repeat:
@@ -59,12 +57,12 @@ export function createVNode({ tagName, events, props, attributes }) {
             const match = val.match(RE_REPEAT);
             const alias = match[1];
             const indexAlias = match[2];
-            const dataSourceName = match[3];
+            const dataSourcePath = match[3].split('.');
             const filter = match[4];
             const orderBy = match[5];
 
             vnode.repeatProps = {
-                dataSourceName,
+                dataSourcePath,
                 alias,
                 indexAlias,
                 filter: compileFilter(filter),

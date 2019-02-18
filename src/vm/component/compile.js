@@ -164,7 +164,6 @@ function readHtmlString(input) {
     let c = 0;
     let text = '';
     let match: IMatch;
-    let textNode;
     let parentVNode;
 
     while (cursor < length) {
@@ -182,12 +181,11 @@ function readHtmlString(input) {
                     if (match) {
                         parentVNode = vnodes[vnodes.length - 1];
 
-                        if (text) {
-                            textNode = {
+                        if (text && (text = text.trim())) {
+                            parentVNode.children.push({
                                 type: 'textNode',
-                                children: text
-                            };
-                            parentVNode.children.push(textNode);
+                                nodeValue: text
+                            });
                             text = '';
                         }
 
@@ -200,11 +198,26 @@ function readHtmlString(input) {
                 break;
             case '{':
                 match = readExpression(input, cursor);
+                if (match) {
+                    parentVNode = vnodes[vnodes.length - 1];
+                    parentVNode.children.push({
+                        type: 'textNode',
+                        props: ['nodeValue', match.value]
+                    });
+                    cursor = match.cursor;
+                }
                 break;
             default:
                 text += c;
                 break;
         }
+    }
+
+    if (text && (text = text.trim())) {
+        vnodes[vnodes.length - 1].children.push({
+            type: 'textNode',
+            nodeValue: text
+        });
     }
 }
 
@@ -487,7 +500,7 @@ function readBlock(input, cursor, endChars) {
                             : `$data.${varStr}`;
                 } else if (isSetter(input, cursor)) {
                     // 设置表达式: property.name = 'xxx'
-                    result += '$setter("' + varStr + '").value';
+                    result += '$setter("' + varStr + '",$data).value';
                 } else {
                     result += parseValue(varStr);
                 }

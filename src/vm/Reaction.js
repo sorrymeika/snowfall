@@ -35,6 +35,7 @@ export class Reaction {
             }
         };
         this._disposers = {};
+        this._disposerKeys = [];
         this._funcs = funcs;
     }
 
@@ -47,18 +48,24 @@ export class Reaction {
 
         const disposers = this._disposers;
         const marks = this._marks;
-        const keys = Object.keys(disposers);
+        const keys = this._disposerKeys;
+        const newKeys = [];
         for (let i = 0; i < keys.length; i++) {
-            if (!marks[keys[i]]) {
-                delete disposers[keys[i]];
+            let key = keys[i];
+            if (!marks[key]) {
+                delete disposers[key];
+            } else {
+                newKeys.push(key);
             }
         }
+        this._disposerKeys = newKeys;
     }
 
     put(model, path) {
         const id = model.state.id + ':' + path;
         if (!this._disposers[id]) {
             this._disposers[id] = () => model.unobserve(path, this.emit);
+            this._disposerKeys.push(id);
             model.observe(path, this.emit);
         }
         this._marks[id] = true;
@@ -69,10 +76,14 @@ export class Reaction {
     }
 
     destroy() {
-        const keys = Object.keys(this._disposers);
-        for (let i = 0; i < keys.length; i++) {
-            this._disposers[keys[i]]();
+        if (!this.isDestroyed) {
+            this.isDestroyed = true;
+            const keys = this._disposerKeys;
+            for (let i = 0; i < keys.length; i++) {
+                this._disposers[keys[i]]();
+            }
+            this._disposers = null;
+            this._disposerKeys = null;
         }
-        this._disposers = null;
     }
 }
