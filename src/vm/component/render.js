@@ -1,15 +1,14 @@
-import { $, fade } from '../../utils/dom';
-import { isNo, isYes, isNumber } from '../../utils/is';
+import { $, fade, TEXT_NODE } from '../../utils/dom';
+import { isNo, isYes, isNumber, isString } from '../../utils/is';
 import { createComponent } from './component';
 import { Reaction } from '../Reaction';
 import { get } from '../../utils';
 import { isModel, isCollection } from '../predicates';
 import List from '../List';
+import { createElement, IElement } from './createElement';
 
 export function render(element: IElement, state, data) {
-    const {
-        vnode
-    } = element;
+    const { vnode } = element;
 
     if (vnode.visibleProps && vnode.visibleProps.type == 'if') {
         let visible = invoke(element, data, vnode.visibleProps.fid);
@@ -24,11 +23,11 @@ export function render(element: IElement, state, data) {
                 if (visible) {
                     removeElement(el);
                 } else if (el.vnode.visibleProps.type == 'else') {
-                    render(el, state, data);
+                    return render(el, state, data);
                 } else {
                     visible = invoke(el, data, el.vnode.visibleProps.fid);
                     if (visible) {
-                        render(el, state, data);
+                        return render(el, state, data);
                     }
                 }
             }
@@ -36,116 +35,13 @@ export function render(element: IElement, state, data) {
         }
     }
 
-    const repeatProps = vnode.repeatProps;
-    if (repeatProps) {
-        const {
-            dataSourcePath,
-            alias,
-            indexAlias,
-            filter,
-            orderByType,
-            orderBy
-        } = repeatProps;
-
-        const dataSourceName = dataSourcePath[0];
-
-        let collection;
-
-        if (dataSourceName === 'this') {
-            collection = get(state, dataSourcePath.slice(1));
-        } else {
-            const source = data[dataSourceName];
-            let sourceState = source.__state;
-            let paths;
-
-            if (!sourceState) {
-                sourceState = state;
-            } else {
-                paths = dataSourcePath.slice(1);
-            }
-            collection = isModel(sourceState)
-                ? sourceState._(paths)
-                : get(sourceState.state.data, paths);
-        }
-
-        if (!isCollection(collection)) {
-            const array = collection;
-            collection = element.collection || (element.collection = new List());
-            collection.set(array);
-        }
-
-        const elements = element.elements;
-        const hasElement = {};
-        const list = [];
-
-        collection.each(function (item) {
-            const itemData = Object.create(data);
-            itemData[alias] = Object.create(item.state.data);
-            itemData[alias].__state = item;
-
-            for (let j = 0; j < elements.length; j++) {
-                if (elements[j].data == item) {
-                    hasElement[j] = true;
-                    break;
-                }
-            }
-            if (filter == null || invoke(element, itemData, filter)) {
-                list.push({
-                    itemData: item.state.data,
-                    data: itemData
-                });
-            }
-        });
-
-        if (orderBy) {
-            let sortMethod;
-            if (orderByType === 'property') {
-                sortMethod = get(state, orderBy);
-            } else {
-                // orderBy=['a',true,someFunctionId,false]
-                const orderByOptions = orderBy.map(function (item) {
-                    if (isNumber(item)) {
-                        return invoke(element, data, item);
-                    }
-                    return item;
-                });
-
-                sortMethod = function (am, bm) {
-                    let ret = 0;
-                    let isDesc;
-                    let sort;
-                    let a,
-                        b;
-
-                    for (var i = 0; i < orderByOptions.length; i += 2) {
-                        sort = orderByOptions[i];
-                        isDesc = orderByOptions[i + 1] == false;
-
-                        a = am[sort];
-                        b = bm[sort];
-
-                        // 中文排序需使用 localeCompare
-                        ret = isNumber(a) && isNumber(b)
-                            ? a - b
-                            : ((a === undefined || a === null) ? '' : (a + '')).localeCompare(b);
-                        isDesc && (ret *= -1);
-
-                        if (ret != 0) return ret;
-                    }
-
-                    return ret;
-                };
-            }
-
-            sortMethod && list.sort(function (a, b) {
-                return sortMethod(a.itemData, b.itemData);
-            });
-        }
-
-        return;
+    if (vnode.repeatProps && element.type !== 'repeat-item') {
+        return renderRepeat(element, state, data);
     }
 
-    if (vnode.type === 'component') {
+    const isComponent = vnode.type === 'component';
+
+    if (isComponent) {
         if (!element.component) {
             element.component = createComponent(vnode.tagName);
         }
@@ -155,25 +51,44 @@ export function render(element: IElement, state, data) {
         const node = document.createElement(vnode.tagName);
         const attributes = vnode.attributes;
 
+        element.node = node;
+
         if (attributes) {
             for (let i = 0; i < attributes.length; i += 2) {
-                setAttribute(node, attributes[i], attributes[i + 1]);
+                setAttribute(element, attributes[i], attributes[i + 1]);
             }
         }
+    }
 
-        element.node = node;
+    const children = element.children;
+    if (children) {
+        let prevSibling;
+        for (let i = 0; i < children.length; i++) {
+            const child = render(children[i], state, data);
+            if (child) {
+                if (!prevSibling) {
+                    prependElement(element, child);
+                } else {
+                    insertElementAfter(prevSibling, child);
+                }
+                prevSibling = child;
+            }
+        }
     }
 
     const props = vnode.props;
     if (props) {
-        if (vnode.type === 'component') {
+        if (isComponent) {
             if (!element.reaction) {
                 const autorun = () => {
-                    const nextProps = {};
+                    const nextProps = {
+                        children
+                    };
                     for (let i = 0; i < props.length; i += 2) {
                         nextProps[props[i]] = invoke(element, data, props[i + 1]);
                     }
                     element.component.set(nextProps);
+                    element.component.render();
                 };
                 element.reaction = new Reaction(autorun);
                 element.autorun = autorun;
@@ -193,17 +108,201 @@ export function render(element: IElement, state, data) {
         }
     }
 
-    const children = element.children;
-    if (children) {
-        for (let i = 0; i < children.length; i++) {
-            render(children[i], state, data);
+    return element;
+}
+
+function renderRepeat(element: IElement, state, data) {
+    const {
+        dataSourcePath,
+        alias,
+        indexAlias,
+        filter,
+        orderByType,
+        orderBy
+    } = element.repeatProps;
+
+    const dataSourceName = dataSourcePath[0];
+
+    let collection;
+
+    if (dataSourceName === 'this') {
+        collection = get(state, dataSourcePath.slice(1));
+    } else {
+        const source = data[dataSourceName];
+        let sourceState = source.__state;
+        let paths;
+
+        if (!sourceState) {
+            sourceState = state;
+        } else {
+            paths = dataSourcePath.slice(1);
+        }
+        collection = isModel(sourceState)
+            ? sourceState._(paths)
+            : get(sourceState.state.data, paths);
+    }
+
+    if (!isCollection(collection)) {
+        const array = collection;
+        collection = element.collection || (element.collection = new List());
+        collection.set(array);
+    }
+
+    const elements = element.elements || [];
+    const visibleElements = {};
+    const list = [];
+
+    collection.each(function (item) {
+        const elementData = Object.create(data);
+        elementData[alias] = Object.create(item.state.data);
+        elementData[alias].__state = item;
+
+        if (filter == null || invoke(element, elementData, filter)) {
+            let itemElement;
+            for (let j = 0; j < elements.length; j++) {
+                if (elements[j].state == item) {
+                    visibleElements[j] = true;
+                    itemElement = elements[j];
+                    break;
+                }
+            }
+
+            if (!itemElement) {
+                const newItemElement = createElement(element.vnode, element.root);
+                newItemElement.type = 'repeat-item';
+                itemElement = {
+                    element: newItemElement,
+                    state: item
+                };
+                visibleElements[elements.length] = true;
+                elements.push(itemElement);
+            }
+
+            list.push({
+                element: itemElement.element,
+                itemData: item.state.data,
+                data: elementData
+            });
+        }
+    });
+
+    if (orderBy) {
+        let sortMethod;
+        if (orderByType === 'property') {
+            sortMethod = get(state, orderBy);
+        } else {
+            // orderBy=['a',true,someFunctionId,false]
+            const orderByOptions = orderBy.map(function (item) {
+                if (isNumber(item)) {
+                    return invoke(element, data, item);
+                }
+                return item;
+            });
+
+            sortMethod = function (am, bm) {
+                let ret = 0,
+                    isDesc,
+                    sort,
+                    a,
+                    b;
+
+                for (let i = 0; i < orderByOptions.length; i += 2) {
+                    sort = orderByOptions[i];
+                    isDesc = orderByOptions[i + 1] == false;
+
+                    a = am[sort];
+                    b = bm[sort];
+
+                    // 中文排序需使用 localeCompare
+                    ret = isNumber(a) && isNumber(b)
+                        ? a - b
+                        : ((a == null) ? '' : (a + '')).localeCompare(b);
+                    isDesc && (ret *= -1);
+
+                    if (ret != 0) return ret;
+                }
+
+                return ret;
+            };
+        }
+
+        sortMethod && list.sort(function (a, b) {
+            return sortMethod(a.itemData, b.itemData);
+        });
+    }
+
+    let cursorElement;
+
+    list.forEach(function (item, index) {
+        const elem = item.element;
+
+        indexAlias && (elem.data[indexAlias] = index);
+        render(elem, state, elem.data);
+        insertElementAfter(cursorElement, elem);
+
+        cursorElement = elem;
+    });
+
+    const refs = [];
+    // 移除过滤掉的element
+    for (let i = 0; i < elements.length; i++) {
+        const elem = elements[i];
+        if (!visibleElements[i]) {
+            removeElement(elem);
+        } else {
+            refs.push(elem.node);
+        }
+    }
+
+    return element;
+}
+
+function isComponent(element) {
+    return element.vnode && element.vnode.type === 'component';
+}
+
+function prependElement(parentElement, element) {
+    if (isComponent(element)) {
+        element.component.prependTo(parentElement);
+    } else {
+        const parentNode = parentElement.node;
+        if (parentNode.firstChild) {
+            parentNode.insertBefore(element.node, parentNode.firstChild);
+        } else {
+            parentNode.appendChild(element.node);
+        }
+    }
+}
+
+function insertElementAfter(destElement, element) {
+    if (isComponent(destElement)) {
+        destElement.component.after(element);
+    } else if (isComponent(element)) {
+        element.component.insertAfter(element);
+    } else {
+        let destNode,
+            newNode;
+
+        destNode = destElement.vnode
+            ? destElement.node
+            : destElement;
+
+        newNode = element.vnode
+            ? element.node
+            : element;
+
+        if (destNode.nextSibling != newNode) {
+            destNode.nextSibling
+                ? destNode.parentNode.insertBefore(newNode, destNode.nextSibling)
+                : destNode.parentNode.appendChild(newNode);
         }
     }
 }
 
 function removeElement(element) {
-    if (element.node.parentNode) {
-        element.node.parentNode.removeChild(element.node);
+    const node = element.node;
+    if (node && node.parentNode) {
+        node.parentNode.removeChild(node);
     }
 }
 
@@ -212,16 +311,18 @@ function invoke(element, data, fid) {
 }
 
 function autoSet(element, name, data, fid) {
-    const autorun = () => setAttribute(element.node, name, invoke(element, data, fid));
+    const autorun = () => setAttribute(element, name, invoke(element, data, fid));
     const reaction = new Reaction(autorun);
     reaction.__propAutoSet = autorun;
     return reaction;
 }
 
-function setAttribute(el, attrName, val) {
+function setAttribute(element, attrName, val) {
+    const el = element.node;
+
     switch (attrName) {
         case 'nodeValue':
-            el.nodeValue = val;
+            setTextNode(element, val);
             break;
         case 'value':
             var nodeName = el.nodeName;
@@ -298,4 +399,61 @@ function setAttribute(el, attrName, val) {
             val === null || val === false ? el.removeAttribute(attrName) : el.setAttribute(attrName, val);
             break;
     }
+}
+
+function setTextNode(element, val) {
+    const tails = element.tails || [];
+
+    if (Array.isArray(val) || (typeof val === 'object' && (val.nodeType || val.vnode) && (val = [val]))) {
+        let cursor = element.node;
+        const newTails = [];
+
+        val.reduce((res, item) => {
+            Array.isArray(item) ? res.push(...item) : res.push(item);
+            return res;
+        }, []).forEach(function (item) {
+            let tail = isString(item)
+                ? findStringTail(tails, item)
+                : findTail(tails, item);
+
+            insertElementAfter(cursor, item);
+            cursor = tail;
+            newTails.push(tail);
+        });
+
+        element.node.nodeValue = '';
+        element.tails = newTails;
+    } else {
+        element.node.nodeValue = val;
+        element.tails = null;
+    }
+
+    tails.forEach(function (tail) {
+        if (tail) {
+            removeElement(tail);
+        }
+    });
+}
+
+function findStringTail(tails, nodeValue) {
+    for (let i = 0; i < tails.length; i++) {
+        let node = tails[i];
+        if (node && node.nodeType === TEXT_NODE) {
+            node.nodeValue = nodeValue;
+            node = undefined;
+            return node;
+        }
+    }
+    return document.createTextNode(nodeValue);
+}
+
+function findTail(tails, element) {
+    for (let i = 0; i < tails.length; i++) {
+        let node = tails[i];
+        if (node == element) {
+            node = undefined;
+            return node;
+        }
+    }
+    return element;
 }

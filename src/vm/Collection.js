@@ -27,6 +27,15 @@ function createItem(collection, index, data) {
     return collection.constructor.createItem(collection, index, data);
 }
 
+function connectItem(collection, item, index) {
+    if (item && ((item[source] && (item = item[source])) || isObservable(item))) {
+        connect(collection, item, index);
+        return item;
+    } else {
+        return createItem(collection, index, item);
+    }
+}
+
 function collectionWillUpdate(collection) {
     const { state } = collection;
     if (!state.setting) {
@@ -273,7 +282,7 @@ export class Collection extends Observer {
             this.each(function (model) {
                 var item = array[i];
 
-                if ((item[source] && (item = item[source])) || isObservable(item)) {
+                if (item && ((item[source] && (item = item[source])) || isObservable(item))) {
                     if (item != model) {
                         isChange = true;
                         disconnect(this, model);
@@ -321,12 +330,7 @@ export class Collection extends Observer {
                 var dataItem = array[i];
                 var index = this.length;
 
-                if ((dataItem[source] && (dataItem = dataItem[source])) || isObservable(dataItem)) {
-                    model = dataItem;
-                    connect(this, dataItem, index);
-                } else {
-                    model = createItem(this, index, dataItem);
-                }
+                model = connectItem(this, dataItem, index);
 
                 this[index] = model;
                 this.state.data[index] = model.state.data;
@@ -534,12 +538,7 @@ export class Collection extends Observer {
             item = array[i];
             offsetIndex = start + i;
 
-            if ((item[source] && (item = item[source])) || isObservable(item)) {
-                model = item;
-                connect(this, model, offsetIndex);
-            } else {
-                model = createItem(this, offsetIndex, item);
-            }
+            model = connectItem(this, item, offsetIndex);
 
             this[offsetIndex] = model;
             this.state.data[offsetIndex] = model.state.data;

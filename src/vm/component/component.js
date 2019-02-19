@@ -1,19 +1,8 @@
 import { compile } from "./compile";
-import { IVNode } from "./createVNode";
 import { createElement } from "./createElement";
 import { render } from "./render";
 
 const ROOT_ELEMENT = Symbol('$rootElement$');
-
-type IElement = {
-    vnode: IVNode,
-    node: any,
-    parent: IElement,
-    children: IElement[],
-    nextSibling: IElement,
-    prevSibling: IElement,
-}
-
 const factories = {};
 
 export function createComponent(tagName) {
@@ -34,9 +23,27 @@ export function component({
         };
 
         const componentClass = class Component {
-            constructor() {
-                this.state = new State();
-                this.state[ROOT_ELEMENT] = createElement(rootVNode);
+            constructor(data) {
+                this.state = new State(data);
+                this.element = this.state[ROOT_ELEMENT] = createElement(rootVNode);
+            }
+
+            appendTo(element) {
+            }
+
+            prependTo(element) {
+            }
+
+            before(element) {
+            }
+
+            after(element) {
+            }
+
+            insertAfter(element) {
+            }
+
+            insertBefore(element) {
             }
 
             set(data) {

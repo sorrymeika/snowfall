@@ -1,4 +1,13 @@
-export function createElement(vnode: IVNode, root) {
+import { IVNode } from "./createVNode";
+
+export type IElement = {
+    vnode: IVNode,
+    node: any,
+    parent: IElement,
+    children: IElement[]
+}
+
+export function createElement(vnode: IVNode, root: IElement): IElement {
     const result = {
         vnode
     };
@@ -7,7 +16,6 @@ export function createElement(vnode: IVNode, root) {
     const vchildren = vnode.children;
     if (vchildren) {
         const children = [];
-        let prevSibling = null;
         for (let i = 0; i < vchildren.length; i++) {
             let vchild = vchildren[i];
             let elem = createElement(vchild, root);
@@ -25,10 +33,6 @@ export function createElement(vnode: IVNode, root) {
                 }
             }
             elem.parent = result;
-            elem.prevSibling = prevSibling;
-            if (prevSibling) {
-                prevSibling.nextSibling = elem;
-            }
             children.push(elem);
         }
         result.children = children;
