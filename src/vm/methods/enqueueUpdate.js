@@ -1,24 +1,15 @@
 import { getMemberName } from "./connect";
 
-var doAsap;
 var taskId;
 var taskCount = 1;
 var callbacks = [];
+var currentRenderId = 0;
+var rendering = false;
+var renderers = [];
+var rendererStore = {};
 
-if (typeof MessageChannel !== 'undefined' && /^\[object MessageChannelConstructor\]$|\[native code\]/.test(MessageChannel.toString())) {
-    const channel = new MessageChannel();
-    const port = channel.port2;
-    channel.port1.onmessage = flushCallbacks;
-    doAsap = () => {
-        port.postMessage(1);
-    };
-} else {
-    doAsap = () => setTimeout(flushCallbacks, 0);
-}
-
-if (process.env.NODE_ENV === 'test') {
-    doAsap = () => Promise.resolve().then(flushCallbacks);
-}
+const resolvedPromise = Promise.resolve();
+const doAsap = () => resolvedPromise.then(flushCallbacks);
 
 function flushCallbacks() {
     // console.time('flushCallbacks');
@@ -42,6 +33,7 @@ function asap(cb) {
 }
 
 let initializers = {};
+let initializerIds = [];
 let doingInit = false;
 let dirts;
 // 标记脏数据 flags&&flags[model.state.id] === true;
@@ -52,22 +44,25 @@ let nexts;
 
 export function enqueueInit(observer) {
     initializers[observer.state.id] = observer;
+    initializerIds.push(observer.state.id);
     if (doingInit) return;
     doingInit = true;
+
+    const renderId = currentRenderId;
     asap(() => {
-        for (let key in initializers) {
-            const item = initializers[key];
-            if (!item.state.rendered) {
-                item.render();
+        for (let i = 0; i < initializerIds.length; i++) {
+            const item = initializers[initializerIds[i]];
+            if (item) {
+                addRenderer(item);
+                bubbleInit(item);
             }
-            item.state.rendered = false;
-            bubbleInit(item);
+        }
+        initializers = {};
+        initializerIds = [];
+        if (renderId === currentRenderId && renderers.length) {
+            render();
         }
         doingInit = false;
-        initializers = {};
-        if (nexts && !flushing && !dirts) {
-            flushNexts();
-        }
     });
 }
 
@@ -91,22 +86,6 @@ function bubbleInit(target, paths) {
     }
 }
 
-function flushNexts() {
-    let j = -1;
-    const fns = nexts;
-
-    // 清空next tick functions
-    // nextTick(() => {
-    //     model.set({ ...changed })
-    //         .nextTick(() => '下一个asap中执行');
-    // });
-    nexts = null;
-
-    while (++j < fns.length) {
-        fns[j]();
-    }
-}
-
 export function enqueueUpdate(dirt) {
     const { state } = dirt;
 
@@ -120,7 +99,10 @@ export function enqueueUpdate(dirt) {
         if (!dirts) {
             dirts = [];
             flags = {};
-            if (!flushing) asap(flushDirts);
+            if (!flushing) {
+                currentRenderId++;
+                asap(flushDirts);
+            }
         }
 
         if (!flags[id]) {
@@ -154,27 +136,14 @@ function flushDirts() {
     }
     flushing = false;
 
-    if (nexts) {
-        flushNexts();
-    }
+    render();
 }
 
 function emitChange(target) {
     if (!changed[target.state.id]) {
         changed[target.state.id] = true;
         target.state.updated = true;
-        if (!target.state.rendered) {
-            if (process.env.NODE_ENV === 'development') {
-                const prefStart = performance.now();
-                target.render();
-                if (performance.now() - prefStart > 15) {
-                    console.warn('slow render:', performance.now() - prefStart, target);
-                }
-            } else {
-                target.render();
-            }
-        }
-        target.state.rendered = false;
+        addRenderer(target);
         target.trigger('datachanged');
         bubbleChange(target);
     }
@@ -212,8 +181,63 @@ export function emitUpdate(target) {
     changed = null;
 }
 
+function addRenderer(item) {
+    if (!rendererStore[item.state.id]) {
+        rendererStore[item.state.id] = true;
+        renderers.push(item);
+    }
+}
+
+function render() {
+    rendering = true;
+    const renderId = currentRenderId;
+    resolvedPromise.then(() => {
+        if (renderId === currentRenderId) {
+            // console.time('render');
+
+            for (let i = 0; i < renderers.length; i++) {
+                const target = renderers[i];
+                if (!target.state.rendered) {
+                    if (process.env.NODE_ENV === 'development') {
+                        const prefStart = performance.now();
+                        target.render();
+                        if (performance.now() - prefStart > 15) {
+                            console.warn('slow render:', performance.now() - prefStart, target);
+                        }
+                    } else {
+                        target.render();
+                    }
+                }
+                target.state.rendered = false;
+                target.trigger('render');
+            }
+
+            // console.timeEnd('render');
+
+            renderers = [];
+            rendererStore = {};
+            rendering = false;
+            if (nexts) {
+                flushNexts();
+            }
+        }
+    });
+}
+
+function flushNexts() {
+    let j = -1;
+    const fns = nexts;
+
+    // 清空next tick functions
+    nexts = null;
+
+    while (++j < fns.length) {
+        fns[j]();
+    }
+}
+
 export function nextTick(cb) {
-    if (dirts || flushing || doingInit) {
+    if (dirts || flushing || doingInit || rendering) {
         nexts
             ? nexts.push(cb)
             : (nexts = [cb]);

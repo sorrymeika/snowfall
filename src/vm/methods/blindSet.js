@@ -9,12 +9,12 @@ export function blindSet(model, renew, keys, val) {
     for (var i = 0, len = keys.length; i < len; i++) {
         key = keys[i];
 
-        if (!isModel(model.state.innerObservers[key])) {
-            tmp = model.state.innerObservers[key] = new Model({}, key, model);
+        if (!isModel(model.state.observableProps[key])) {
+            tmp = model.state.observableProps[key] = new Model({}, key, model);
             model.state.data[key] = tmp.state.data;
             model = tmp;
         } else {
-            model = model.state.innerObservers[key];
+            model = model.state.observableProps[key];
         }
     }
     return model.set(renew, lastKey, val);

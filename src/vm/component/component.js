@@ -10,7 +10,7 @@ export function createComponent(tagName) {
 }
 
 export function component({
-    name,
+    selector,
     template
 }) {
     const rootVNode = compile(template);
@@ -54,6 +54,6 @@ export function component({
                 this.state.render();
             }
         };
-        factories[name] = componentClass;
+        factories[selector] = componentClass;
     };
 }

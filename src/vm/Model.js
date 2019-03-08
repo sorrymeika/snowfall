@@ -38,7 +38,7 @@ export class Model extends Observer {
         }
         super();
         this.state.initialized = false;
-        this.state.innerObservers = {};
+        this.state.observableProps = {};
 
         if (parent) {
             connect(parent, this, key);
@@ -99,7 +99,7 @@ export class Model extends Observer {
             query = m[2];
 
             if (isModel(result)) {
-                result = result.state.innerObservers[attr] || (result.state.data != null ? result.state.data[attr] : undefined);
+                result = result.state.observableProps[attr] || (result.state.data != null ? result.state.data[attr] : undefined);
 
                 if (query && isCollection(result)) {
                     return result._(query + search.substr(m.index + m[0].length), def);
@@ -158,7 +158,7 @@ export class Model extends Observer {
 
         if (keyIsVal && (!keyIsObject || !isPlainObject(key))) {
             if (state.changed = (state.data !== key)) {
-                state.innerObservers = {};
+                state.observableProps = {};
                 state.data = keyIsObject ? Object.create(key) : key;
                 enqueueUpdate(this);
                 updateRefs(this);
@@ -206,17 +206,17 @@ export class Model extends Observer {
         var changes = [];
         var origin;
         var value;
-        var innerObservers = state.innerObservers;
+        var observableProps = state.observableProps;
 
         for (var attr in attrs) {
-            origin = innerObservers[attr] || attributes[attr];
+            origin = observableProps[attr] || attributes[attr];
             value = attrs[attr];
             if (value && value[source]) {
                 value = value[source];
             }
             if (origin !== value) {
                 if (isObservable(value)) {
-                    innerObservers[attr] = value;
+                    observableProps[attr] = value;
                     attributes[attr] = value.state.data;
 
                     if (isObservable(origin)) {
@@ -255,7 +255,7 @@ export class Model extends Observer {
                 } else {
                     value = createAttribute(this, attr, value);
                     if (isObservable(value)) {
-                        innerObservers[attr] = value;
+                        observableProps[attr] = value;
                         attributes[attr] = value.state.data;
                     } else {
                         changes.push(attr, value, attributes[attr]);
@@ -297,20 +297,20 @@ export class Model extends Observer {
         var result = this._(key);
         if (result == null) {
             this.set(key, []);
-            return this.state.innerObservers[key];
+            return this.state.observableProps[key];
         }
         return result;
     }
 
     model(key) {
-        if (!this.state.innerObservers[key]) this.set(key, {});
-        return this.state.innerObservers[key];
+        if (!this.state.observableProps[key]) this.set(key, {});
+        return this.state.observableProps[key];
     }
 
     observable(key) {
-        const { innerObservers, data } = this.state;
+        const { observableProps, data } = this.state;
 
-        if (innerObservers[key]) return innerObservers[key];
+        if (observableProps[key]) return observableProps[key];
 
         var value = data == null ? undefined : data[key];
         const observer = observable(value);
@@ -367,14 +367,14 @@ export class Model extends Observer {
     destroy() {
         super.destroy();
 
-        if (this.state.innerObservers) {
-            for (var key in this.state.innerObservers) {
-                var model = this.state.innerObservers[key];
+        if (this.state.observableProps) {
+            for (var key in this.state.observableProps) {
+                var model = this.state.observableProps[key];
                 if (model) {
                     disconnect(this, model);
                 }
             }
-            this.state.innerObservers = null;
+            this.state.observableProps = null;
         }
     }
 }

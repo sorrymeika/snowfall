@@ -47,11 +47,11 @@ export default class FunctionCompiler {
     }
 
     getFunctionArg(element, snData) {
-        var data = Object.assign({
-            srcElement: element,
-            util: util,
-            $filter: $filter
-        }, this.viewModel.state.data);
+        var data = Object.create(this.viewModel.state.data);
+
+        data.srcElement = element;
+        data.util = util;
+        data.$filter = $filter;
 
         if (snData) {
             for (var key in snData) {

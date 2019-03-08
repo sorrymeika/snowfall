@@ -40,22 +40,26 @@ export function render(element: IElement, state, data) {
     }
 
     const isComponent = vnode.type === 'component';
-
     if (isComponent) {
         if (!element.component) {
             element.component = createComponent(vnode.tagName);
         }
-    } else if (vnode.type === 'textNode') {
-        element.node = document.createTextNode(vnode.nodeValue || '');
     } else if (!element.node) {
-        const node = document.createElement(vnode.tagName);
-        const attributes = vnode.attributes;
+        if (vnode.type === 'root') {
+            element.node = document.createComment('component root');
+        } else if (vnode.type === 'textNode') {
+            element.node = document.createTextNode(vnode.nodeValue || '');
+        } else {
+            // var node = isSvg ? document.createElementNS('http://www.w3.org/2000/svg', nodeName) : document.createElement(nodeName);
+            const node = document.createElement(vnode.tagName);
+            const attributes = vnode.attributes;
 
-        element.node = node;
+            element.node = node;
 
-        if (attributes) {
-            for (let i = 0; i < attributes.length; i += 2) {
-                setAttribute(element, attributes[i], attributes[i + 1]);
+            if (attributes) {
+                for (let i = 0; i < attributes.length; i += 2) {
+                    setAttribute(element, attributes[i], attributes[i + 1]);
+                }
             }
         }
     }
@@ -266,8 +270,11 @@ function prependElement(parentElement, element) {
         element.component.prependTo(parentElement);
     } else {
         const parentNode = parentElement.node;
-        if (parentNode.firstChild) {
-            parentNode.insertBefore(element.node, parentNode.firstChild);
+        const firstChild = parentNode.firstChild;
+        if (firstChild) {
+            if (firstChild !== element.node) {
+                parentNode.insertBefore(element.node, firstChild);
+            }
         } else {
             parentNode.appendChild(element.node);
         }
