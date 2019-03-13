@@ -1,4 +1,4 @@
-import { isArray, isString, isFunction, isNumber } from '../utils/is';
+import { isArray, isString, isFunction, isNumber, isUndefined } from '../utils/is';
 import * as arrayUtils from '../utils/array';
 import { extend } from '../utils/clone';
 
@@ -65,6 +65,82 @@ function collectionDidUpdate(collection) {
         state.backup = null;
     }
     return collection;
+}
+
+/**
+ * 更新 collection 中的 model
+ *
+ * @param {Array|Object} arr 需要更新的数组
+ * @param {String|Function} comparator 唯一健 或 (a, b)=>boolean
+ * @param {boolean} [appendMatched] 是否追加不匹配的
+ * @param {boolean} [renewItem] 是否覆盖匹配项
+ *
+ * @return {Collection} input collection
+ */
+function update(collection, arr, comparator, appendUnmatched = true, renewItem = false) {
+    if (!arr) return collection;
+
+    var fn;
+    var length = collection.length;
+
+    if (!length) {
+        appendUnmatched && collection.add(arr);
+        return collection;
+    }
+
+    collectionWillUpdate(collection);
+
+    if (isString(comparator)) {
+        fn = function (a, b) {
+            return a[comparator] == b[comparator];
+        };
+    } else fn = comparator;
+
+    var data;
+    var arrItem;
+
+    if (!isArray(arr)) arr = [arr];
+    else arr = [].concat(arr);
+
+    var n = arr.length;
+
+    for (var i = length - 1; i >= 0; i--) {
+        data = collection.state.data[i];
+
+        for (var j = 0; j < n; j++) {
+            arrItem = arr[j];
+
+            if (arrItem !== undefined) {
+                if (fn.call(collection, data, arrItem)) {
+                    const item = collection[i];
+                    if (isModel(item)) {
+                        item.set(renewItem, arrItem);
+                    } else {
+                        item.set(arrItem);
+                    }
+                    if (collection[i].state.changed) {
+                        collection.state.changed = true;
+                    }
+                    arr[j] = undefined;
+                    break;
+                }
+            }
+        }
+    }
+
+    if (appendUnmatched) {
+        var appends = [];
+        for (i = 0; i < n; i++) {
+            if (arr[i] !== undefined) {
+                appends.push(arr[i]);
+            }
+        }
+        if (appends.length) {
+            collection.add(appends);
+        }
+    }
+
+    return collectionDidUpdate(this);
 }
 
 export class Collection extends Observer {
@@ -369,6 +445,20 @@ export class Collection extends Observer {
     }
 
     /**
+     * 根据 comparator 更新Model，不在collection中的将会追加到尾部
+     * collection.update([{ id: 123 name: '更新掉name' }], 'id')
+     *
+     * @param {String} comparator 属性名/比较方法
+     * @param {Object} data
+     * @param {Object} renewItem 是否覆盖匹配项
+     *
+     * @return {Collection} self
+     */
+    update(arr, comparator, renewItem = false) {
+        return update(this, arr, comparator, true, renewItem);
+    }
+
+    /**
      * 根据 comparator 更新Model
      * collection.updateBy('id', { id: 123 name: '更新掉name' })
      * collection.updateBy('id', [{ id: 123 name: '更新掉name' }])
@@ -380,37 +470,22 @@ export class Collection extends Observer {
      * @return {Collection} self
      */
     updateBy(comparator, data, renewItem = false) {
-        return this.update(data, comparator, false, false, false);
+        return update(this, data, comparator, false, renewItem);
     }
 
     /**
-     * 已有项将被覆盖，不在arr中的项将被删除，结果与入参array的排序可能会不同
+     * 更新为传入的数组
      * @param {*} arr
      * @param {*} comparator
      */
     updateTo(arr, comparator) {
-        return this.update(arr, comparator, true, true, true);
-    }
-
-    /**
-     * 更新 collection 中的 model
-     *
-     * @param {Array|Object} arr 需要更新的数组
-     * @param {String|Function} comparator 唯一健 或 (a, b)=>boolean
-     * @param {number} [appendMatched] 是否追加不匹配的
-     * @param {number} [removeUnmatchedFromOrig] 是否移除不匹配的
-     * @param {number} [renewItem] 是否覆盖匹配项
-     *
-     * @return {Collection} self
-     */
-    update(arr, comparator, appendUnmatched = true, removeUnmatchedFromOrig = false, renewItem = false) {
         if (!arr) return this;
 
-        var fn;
-        var length = this.length;
+        let fn;
+        let length = this.length;
 
         if (!length) {
-            (appendUnmatched) && this.add(arr);
+            this.add(arr);
             return this;
         }
 
@@ -422,51 +497,58 @@ export class Collection extends Observer {
             };
         } else fn = comparator;
 
-        var item;
-        var arrItem;
-        var matched;
+        const arrayLength = arr.length;
 
-        if (!isArray(arr)) arr = [arr];
-        else arr = [].concat(arr);
+        for (let i = 0; i < arrayLength; i++) {
+            const arrItem = arr[i];
+            let item,
+                index = -1,
+                j;
 
-        var n = arr.length;
-
-        for (var i = length - 1; i >= 0; i--) {
-            item = this.state.data[i];
-            matched = false;
-
-            for (var j = 0; j < n; j++) {
-                arrItem = arr[j];
-
-                if (arrItem !== undefined) {
-                    if (fn.call(this, item, arrItem)) {
-                        this[i].set(renewItem, arrItem);
-                        if (this[i].state.changed) {
-                            this.state.changed = true;
-                        }
-                        arr[j] = undefined;
-                        matched = true;
-                        break;
-                    }
+            for (j = i; j < length; j++) {
+                const data = this.state.data[j];
+                if (fn.call(this, data, arrItem)) {
+                    item = this[j];
+                    index = j;
+                    break;
                 }
             }
 
-            if (removeUnmatchedFromOrig && !matched) {
-                this.splice(i, 1);
+            if (index === -1) {
+                item = connectItem(this, arrItem, i);
+            } else {
+                if (isModel(item)) {
+                    item.set(true, arrItem);
+                } else {
+                    item.set(arrItem);
+                }
+                if (this[i].state.changed) {
+                    this.state.changed = true;
+                }
+            }
+
+            if (i !== index) {
+                if (index === -1) {
+                    index = length;
+                    length++;
+                }
+                this[index] = this[i];
+                this[i] = item;
+                this.state.data[i] = item.state.data;
+                setMapper(this, this[i], i);
+                this.state.changed = true;
             }
         }
 
-        if (appendUnmatched) {
-            var appends = [];
-            for (i = 0; i < n; i++) {
-                if (arr[i] !== undefined) {
-                    appends.push(arr[i]);
-                }
-            }
-            if (appends.length) {
-                this.add(appends);
+        if (arrayLength < length) {
+            for (let i = arrayLength; i < length; i++) {
+                delete this[i];
             }
         }
+        if (this.state.data.length != arrayLength) {
+            this.state.data.length = arrayLength;
+        }
+        this.length = arrayLength;
 
         return collectionDidUpdate(this);
     }
@@ -744,3 +826,22 @@ export class Collection extends Observer {
 }
 
 Collection.prototype.toArray = Collection.prototype.toJSON;
+
+
+setTimeout(() => {
+    const test = new Collection([{
+        id: 1,
+        name: 'a',
+        ext: 'x1'
+    }, {
+        id: 2,
+        name: 'b',
+        ext: 'x2'
+    }]);
+
+    console.log(test.array);
+
+    test.updateTo([{ id: 1, name: 'b' }, { id: 2, name: 'c' }, { id: 3, name: 'e' }], 'id');
+
+    console.log(test, test.array);
+}, 0);
