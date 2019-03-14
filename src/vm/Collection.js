@@ -1,4 +1,4 @@
-import { isArray, isString, isFunction, isNumber, isUndefined } from '../utils/is';
+import { isArray, isString, isFunction, isNumber } from '../utils/is';
 import * as arrayUtils from '../utils/array';
 import { extend } from '../utils/clone';
 
@@ -54,6 +54,7 @@ function collectionDidUpdate(collection) {
         if (state.changed) {
             enqueueUpdate(collection);
             updateRefs(collection);
+            bindWithMutations(collection);
 
             if (process.env.NODE_ENV === 'development') {
                 Object.freeze(state.data);
@@ -143,6 +144,10 @@ function update(collection, arr, comparator, appendUnmatched = true, renewItem =
     return collectionDidUpdate(this);
 }
 
+function bindWithMutations(collection) {
+    collection.state.data.withMutations = collection.state.withMutations;
+}
+
 export class Collection extends Observer {
     static createItem(parent, index, data) {
         return new Model(data, index, parent);
@@ -150,8 +155,13 @@ export class Collection extends Observer {
 
     constructor(array, attributeName, parent) {
         super();
+        this.state.withMutations = (fn) => {
+            fn(this);
+            return this.state.data;
+        };
         this.state.initialized = false;
         this.state.data = [];
+        bindWithMutations(this);
 
         if (parent) {
             connect(parent, this, attributeName);
@@ -827,21 +837,20 @@ export class Collection extends Observer {
 
 Collection.prototype.toArray = Collection.prototype.toJSON;
 
+// setTimeout(() => {
+//     const test = new Collection([{
+//         id: 1,
+//         name: 'a',
+//         ext: 'x1'
+//     }, {
+//         id: 2,
+//         name: 'b',
+//         ext: 'x2'
+//     }]);
 
-setTimeout(() => {
-    const test = new Collection([{
-        id: 1,
-        name: 'a',
-        ext: 'x1'
-    }, {
-        id: 2,
-        name: 'b',
-        ext: 'x2'
-    }]);
+//     console.log(test.array);
 
-    console.log(test.array);
+//     test.updateTo([{ id: 1, name: 'b' }], 'id');
 
-    test.updateTo([{ id: 1, name: 'b' }, { id: 2, name: 'c' }, { id: 3, name: 'e' }], 'id');
-
-    console.log(test, test.array);
-}, 0);
+//     console.log(test, test.array);
+// }, 0);

@@ -1,7 +1,7 @@
 import initializer from "./initializer";
 import { isObject } from "../../utils";
 import { source } from "./symbols";
-import { subscribe } from "../Reaction";
+import { reactTo } from "../Reaction";
 
 export function object(target, name, decorator) {
     initializer(target);
@@ -9,7 +9,7 @@ export function object(target, name, decorator) {
     return {
         enumerable: true,
         get() {
-            subscribe(this[source], name);
+            reactTo(this[source], name);
             const state = this[source].model(name).state;
             return state.facade || state.data;
         },

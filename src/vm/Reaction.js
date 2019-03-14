@@ -1,9 +1,19 @@
 let currentReaction;
 
-export function subscribe(model, path) {
+export function reactTo(model, path) {
     if (currentReaction) {
-        currentReaction.put(model, path);
+        put.call(currentReaction, model, path);
     }
+}
+
+function put(model, path) {
+    const id = model.state.id + ':' + path;
+    if (!this._disposers[id]) {
+        this._disposers[id] = () => model.unobserve(path, this.emit);
+        this._disposerKeys.push(id);
+        model.observe(path, this.emit);
+    }
+    this._marks[id] = true;
 }
 
 const resolvedPromise = Promise.resolve();
@@ -59,16 +69,6 @@ export class Reaction {
             }
         }
         this._disposerKeys = newKeys;
-    }
-
-    put(model, path) {
-        const id = model.state.id + ':' + path;
-        if (!this._disposers[id]) {
-            this._disposers[id] = () => model.unobserve(path, this.emit);
-            this._disposerKeys.push(id);
-            model.observe(path, this.emit);
-        }
-        this._marks[id] = true;
     }
 
     observe(fn) {

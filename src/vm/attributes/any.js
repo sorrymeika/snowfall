@@ -1,6 +1,6 @@
 import initializer from "./initializer";
 import { source } from "./symbols";
-import { subscribe } from "../Reaction";
+import { reactTo } from "../Reaction";
 
 export function object(target, name, decorator) {
     initializer(target);
@@ -8,7 +8,7 @@ export function object(target, name, decorator) {
     return {
         enumerable: true,
         get() {
-            subscribe(this[source], name);
+            reactTo(this[source], name);
             return this[source].get(name);
         },
         set(val) {

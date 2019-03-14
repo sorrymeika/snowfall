@@ -1,6 +1,6 @@
 import initializer from "./initializer";
 import { source } from "./symbols";
-import { subscribe } from "../Reaction";
+import { reactTo } from "../Reaction";
 
 export function func(target, name, descriptor) {
     initializer(target);
@@ -17,7 +17,7 @@ export function func(target, name, descriptor) {
                     ? descriptor.value.bind(this)
                     : descriptor.value);
             }
-            subscribe(observer, name);
+            reactTo(observer, name);
             return observer.get(name);
         },
         set(val) {

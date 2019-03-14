@@ -1,6 +1,7 @@
 import { Model } from "../Model";
 import { source } from "./symbols";
 import { isObservable } from "../predicates";
+import { isString } from "../../utils";
 
 const INITED = Symbol('inited');
 
@@ -42,8 +43,15 @@ function get(obj, key) {
     return validObj(obj, this).get(key);
 }
 
-function set(obj, fn) {
-    const source = validObj(obj, this);
+function set(obj, arg1, arg2) {
+    let source = validObj(obj, this);
+    let fn;
+    if (isString(arg1)) {
+        source = source._(arg1);
+        fn = arg2;
+    } else {
+        fn = arg1;
+    }
     if (typeof fn === 'function') {
         fn(source);
     } else {

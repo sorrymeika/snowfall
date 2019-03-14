@@ -1,7 +1,7 @@
 import initializer from "./initializer";
 import { source } from "./symbols";
 import { isBoolean } from "../../utils";
-import { subscribe } from "../Reaction";
+import { reactTo } from "../Reaction";
 
 export function boolean(target, name) {
     initializer(target);
@@ -9,7 +9,7 @@ export function boolean(target, name) {
     return {
         enumerable: true,
         get() {
-            subscribe(this[source], name);
+            reactTo(this[source], name);
             return this[source].get(name);
         },
         set(val) {
