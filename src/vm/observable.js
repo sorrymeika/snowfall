@@ -9,6 +9,8 @@ import { reactTo } from "./Reaction";
 
 const propertyStore = Symbol('propertyStore');
 
+const initStore = new WeakMap();
+
 /**
  * 可观察对象
  * @param {any} initalValue
@@ -22,35 +24,55 @@ const propertyStore = Symbol('propertyStore');
  *   }
  * })
  */
-const observable = (initalValue, execute) => {
+const observable = (initalValue, execute, descriptor) => {
     // 装饰器模式
     if (isString(execute)) {
-        Object.defineProperty(initalValue, propertyStore, {
-            configurable: true,
-            get() {
-                const model = new Model();
-                model.state.facade = this;
-                Object.defineProperty(this, propertyStore, {
-                    get() {
-                        return model;
-                    }
-                });
-                return model;
+        if (!initalValue[propertyStore]) {
+            Object.defineProperty(initalValue, propertyStore, {
+                configurable: true,
+                get() {
+                    const proto = this.constructor.prototype;
+                    const initProperties = initStore.has(proto)
+                        ? initStore.get(proto)
+                        : {};
+
+                    const model = new Model(initProperties);
+                    model.state.facade = this;
+
+                    Object.defineProperty(this, propertyStore, {
+                        get() {
+                            return model;
+                        }
+                    });
+                    return model;
+                }
+            });
+        }
+
+        if (descriptor.initializer || descriptor.value !== undefined) {
+            let initProperties = initStore.get(initalValue);
+            if (!initProperties) {
+                initStore.set(initalValue, initProperties = {});
             }
-        });
+            initProperties[execute] = descriptor
+                ? descriptor.initializer()
+                : descriptor.value;
+        }
 
         return {
             enumerable: true,
             get() {
-                reactTo(this[propertyStore], name);
-                const result = this.state.observableProps[name] || this.state.data[name];
+                const model = this[propertyStore];
+                const result = model.state.observableProps[execute] || model.state.data[execute];
+
+                reactTo(model, execute);
 
                 return isObservable(result)
                     ? result.state.facade || result.state.data
                     : result;
             },
             set(val) {
-                this[propertyStore].set(name, val);
+                this[propertyStore].set(execute, val);
             }
         };
     }
@@ -108,3 +130,12 @@ observable.fromPromise = (promise) => () => observable(new Emitter(), (observer,
 });
 
 export default observable;
+
+class A {
+    @observable
+    a = 1;
+}
+
+setTimeout(() => {
+    console.log(new A().a);
+}, 0);

@@ -4,6 +4,7 @@ import { isObservable } from "../predicates";
 import { isString } from "../../utils";
 
 const INITED = Symbol('inited');
+const initStore = new WeakMap();
 
 function validObj(obj, constructor) {
     if (process.env.NODE_ENV === "development") {
@@ -68,14 +69,19 @@ export function hoistStaticMethods(obj) {
     obj.set = set;
 }
 
-export default function initializer(obj) {
+export default function initializer(obj, name, descriptor) {
     if (!obj[source]) {
         hoistStaticMethods(obj.constructor);
 
         Object.defineProperty(obj, source, {
             configurable: true,
             get() {
-                const model = new Model();
+                const proto = this.constructor.prototype;
+                const initProperties = initStore.has(proto)
+                    ? initStore.get(proto)
+                    : {};
+
+                const model = new Model(initProperties);
                 model.state.facade = this;
                 this[INITED] = true;
 
@@ -87,5 +93,15 @@ export default function initializer(obj) {
                 return model;
             }
         });
+    }
+
+    if (descriptor.initializer || descriptor.value !== undefined) {
+        let initProperties = initStore.get(obj);
+        if (!initProperties) {
+            initStore.set(obj, initProperties = {});
+        }
+        initProperties[name] = descriptor
+            ? descriptor.initializer()
+            : descriptor.value;
     }
 }

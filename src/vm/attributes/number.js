@@ -3,8 +3,8 @@ import { source } from "./symbols";
 import { isNumber } from "../../utils";
 import { reactTo } from "../Reaction";
 
-export function number(target, name, decorator) {
-    initializer(target);
+export function number(target, name, descriptor) {
+    initializer(target, name, descriptor);
 
     return {
         enumerable: true,

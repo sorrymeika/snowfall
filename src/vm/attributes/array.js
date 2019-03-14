@@ -2,8 +2,8 @@ import initializer from "./initializer";
 import { source } from "./symbols";
 import { reactTo } from "../Reaction";
 
-export function array(target, name) {
-    initializer(target);
+export function array(target, name, descriptor) {
+    initializer(target, name, descriptor);
 
     return {
         enumerable: true,

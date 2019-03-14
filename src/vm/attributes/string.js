@@ -3,8 +3,8 @@ import { source } from "./symbols";
 import { isString } from "../../utils";
 import { reactTo } from "../Reaction";
 
-export function string(target, name) {
-    initializer(target);
+export function string(target, name, descriptor) {
+    initializer(target, name, descriptor);
 
     return {
         enumerable: true,

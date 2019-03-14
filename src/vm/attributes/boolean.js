@@ -3,8 +3,8 @@ import { source } from "./symbols";
 import { isBoolean } from "../../utils";
 import { reactTo } from "../Reaction";
 
-export function boolean(target, name) {
-    initializer(target);
+export function boolean(target, name, descriptor) {
+    initializer(target, name, descriptor);
 
     return {
         enumerable: true,

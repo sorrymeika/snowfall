@@ -3,8 +3,8 @@ import { isObject } from "../../utils";
 import { source } from "./symbols";
 import { reactTo } from "../Reaction";
 
-export function object(target, name, decorator) {
-    initializer(target);
+export function object(target, name, descriptor) {
+    initializer(target, name, descriptor);
 
     return {
         enumerable: true,
