@@ -141,7 +141,7 @@ function update(collection, arr, comparator, appendUnmatched = true, renewItem =
         }
     }
 
-    return collectionDidUpdate(this);
+    return collectionDidUpdate(collection);
 }
 
 function bindWithMutations(collection) {

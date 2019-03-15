@@ -3,8 +3,9 @@ import { source } from "./symbols";
 import { isObservable } from "../predicates";
 import { isString } from "../../utils";
 
-const INITED = Symbol('inited');
-const initStore = new WeakMap();
+const propertyStore = new WeakMap();
+const initedClasses = new WeakMap();
+const instanceStore = new WeakMap();
 
 function validObj(obj, constructor) {
     if (process.env.NODE_ENV === "development") {
@@ -20,7 +21,7 @@ function validObj(obj, constructor) {
 
 function init(obj, data) {
     if (data == null) return;
-    if (obj[INITED]) throw new Error('obj was initialized!');
+    if (instanceStore.has(obj)) throw new Error('obj was initialized!');
     const model = validObj(obj, this);
     model.state.initialized = false;
     model.set(data);
@@ -70,20 +71,44 @@ export function hoistStaticMethods(obj) {
 }
 
 export default function initializer(obj, name, descriptor) {
-    if (!obj[source]) {
+    if (!initedClasses.has(obj)) {
+        initedClasses.set(obj, true);
+
         hoistStaticMethods(obj.constructor);
 
         Object.defineProperty(obj, source, {
             configurable: true,
             get() {
                 const proto = this.constructor.prototype;
-                const initProperties = initStore.has(proto)
-                    ? initStore.get(proto)
-                    : {};
+                if (proto === this) {
+                    return true;
+                }
+
+                let initProperties;
+                if (propertyStore.has(proto)) {
+                    const props = propertyStore.get(proto);
+                    const instance = Object.create(this, props.reduce((result, { name, desc }) => {
+                        result[name] = {
+                            get() {
+                                return desc.initializer
+                                    ? desc.initializer.call(instance)
+                                    : desc.value;
+                            }
+                        };
+                        return result;
+                    }, {}));
+                    initProperties = props.reduce((result, { name }) => {
+                        result[name] = instance[name];
+                        return result;
+                    }, {});
+                } else {
+                    initProperties = {};
+                }
 
                 const model = new Model(initProperties);
                 model.state.facade = this;
-                this[INITED] = true;
+
+                instanceStore.set(this, true);
 
                 Object.defineProperty(this, source, {
                     get() {
@@ -96,12 +121,13 @@ export default function initializer(obj, name, descriptor) {
     }
 
     if (descriptor.initializer || descriptor.value !== undefined) {
-        let initProperties = initStore.get(obj);
+        let initProperties = propertyStore.get(obj);
         if (!initProperties) {
-            initStore.set(obj, initProperties = {});
+            propertyStore.set(obj, initProperties = []);
         }
-        initProperties[name] = descriptor
-            ? descriptor.initializer()
-            : descriptor.value;
+        initProperties.push({
+            name: name,
+            desc: descriptor
+        });
     }
 }

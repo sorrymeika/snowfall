@@ -7,9 +7,9 @@ import State from "./State";
 import Emitter from "./Emitter";
 import { reactTo } from "./Reaction";
 
-const propertyStore = Symbol('propertyStore');
-
-const initStore = new WeakMap();
+const propertyKey = Symbol('propertyKey');
+const propertyStore = new WeakMap();
+const initedClasses = new WeakMap();
 
 /**
  * 可观察对象
@@ -27,42 +27,68 @@ const initStore = new WeakMap();
 const observable = (initalValue, execute, descriptor) => {
     // 装饰器模式
     if (isString(execute)) {
-        if (!initalValue[propertyStore]) {
-            Object.defineProperty(initalValue, propertyStore, {
+        if (!initedClasses.has(initalValue)) {
+
+            initedClasses.set(initalValue, true);
+
+            Object.defineProperty(initalValue, propertyKey, {
                 configurable: true,
                 get() {
                     const proto = this.constructor.prototype;
-                    const initProperties = initStore.has(proto)
-                        ? initStore.get(proto)
-                        : {};
+                    if (proto === this) {
+                        return true;
+                    }
+
+                    let initProperties;
+                    if (propertyStore.has(proto)) {
+                        const props = propertyStore.get(proto);
+                        const instance = Object.create(this, props.reduce((result, { name, desc }) => {
+                            result[name] = {
+                                get() {
+                                    return desc.initializer
+                                        ? desc.initializer.call(instance)
+                                        : desc.value;
+                                }
+                            };
+                            return result;
+                        }, {}));
+                        initProperties = props.reduce((result, { name }) => {
+                            result[name] = instance[name];
+                            return result;
+                        }, {});
+                    } else {
+                        initProperties = {};
+                    }
 
                     const model = new Model(initProperties);
                     model.state.facade = this;
 
-                    Object.defineProperty(this, propertyStore, {
+                    Object.defineProperty(this, propertyKey, {
                         get() {
                             return model;
                         }
                     });
+
                     return model;
                 }
             });
         }
 
         if (descriptor.initializer || descriptor.value !== undefined) {
-            let initProperties = initStore.get(initalValue);
+            let initProperties = propertyStore.get(initalValue);
             if (!initProperties) {
-                initStore.set(initalValue, initProperties = {});
+                propertyStore.set(initalValue, initProperties = []);
             }
-            initProperties[execute] = descriptor
-                ? descriptor.initializer()
-                : descriptor.value;
+            initProperties.push({
+                name: execute,
+                desc: descriptor
+            });
         }
 
         return {
             enumerable: true,
             get() {
-                const model = this[propertyStore];
+                const model = this[propertyKey];
                 const result = model.state.observableProps[execute] || model.state.data[execute];
 
                 reactTo(model, execute);
@@ -72,7 +98,7 @@ const observable = (initalValue, execute, descriptor) => {
                     : result;
             },
             set(val) {
-                this[propertyStore].set(execute, val);
+                this[propertyKey].set(execute, val);
             }
         };
     }
@@ -131,11 +157,18 @@ observable.fromPromise = (promise) => () => observable(new Emitter(), (observer,
 
 export default observable;
 
-class A {
-    @observable
-    a = 1;
-}
+// class A {
+//     @observable
+//     a = 1;
 
-setTimeout(() => {
-    console.log(new A().a);
-}, 0);
+//     @observable
+//     b = this.a;
+
+//     @observable
+//     c = 'asdf';
+// }
+
+// setTimeout(() => {
+//     var a = new A();
+//     console.log(a.a, a.c, a.b);
+// }, 0);
