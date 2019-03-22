@@ -6,7 +6,8 @@ export type IElement = {
     vnode: IVNode,
     node: any,
     parent: IElement,
-    children: IElement[]
+    children: IElement[],
+    childElements: IElement[]
 }
 
 export function createElement(vnode: IVNode, root: IElement): IElement {
@@ -167,6 +168,11 @@ export function setAttribute(element, attrName, val) {
     const el = element.node;
 
     switch (attrName) {
+        case '...':
+            for (let key in val) {
+                setAttribute(element, key, val[key]);
+            }
+            break;
         case 'nodeValue':
             setTextNode(element, val);
             break;
@@ -288,7 +294,7 @@ function findStringTail(tails, nodeValue) {
         let node = tails[i];
         if (node && node.nodeType === TEXT_NODE) {
             node.nodeValue = nodeValue;
-            node = undefined;
+            tails[i] = undefined;
             return node;
         }
     }
@@ -299,7 +305,7 @@ function findTail(tails, element) {
     for (let i = 0; i < tails.length; i++) {
         let node = tails[i];
         if (node == element) {
-            node = undefined;
+            tails[i] = undefined;
             return node;
         }
     }

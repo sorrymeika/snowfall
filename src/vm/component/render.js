@@ -77,17 +77,17 @@ export function render(element: IElement, state, data) {
         let prevSibling;
         if (vnode.type === 'root') {
             prevSibling = element.firstChild;
-        } else if (vnode.type === 'component') {
-            prevSibling = element.component.element.firstChild;
         }
         element.childElements = [];
         for (let i = 0; i < children.length; i++) {
             const child = render(children[i], state, data);
             if (child) {
-                if (!prevSibling) {
-                    prependElement(element, child);
-                } else {
-                    insertElementAfter(prevSibling, child);
+                if (!isComponent) {
+                    if (!prevSibling) {
+                        prependElement(element, child);
+                    } else {
+                        insertElementAfter(prevSibling, child);
+                    }
                 }
                 element.childElements.push(child);
                 prevSibling = child;
@@ -101,7 +101,7 @@ export function render(element: IElement, state, data) {
             if (!element.reaction) {
                 const autorun = () => {
                     const nextProps = {
-                        children
+                        children: element.childElements
                     };
                     for (let i = 0; i < props.length; i += 2) {
                         nextProps[props[i]] = invoke(element, data, props[i + 1]);

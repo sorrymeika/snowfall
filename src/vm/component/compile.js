@@ -324,6 +324,14 @@ function readAttributes(input, cursor) {
                     name = '';
                 }
                 break;
+            case '{':
+                if (input[cursor] == '.' && input[cursor + 1] == '.' && input[cursor + 2] == '.') {
+                    cursor += 3;
+                }
+                match = readExpression(input, cursor);
+                props.push('...', match.value);
+                cursor = match.cursor;
+                break;
             case '@':
                 name = '';
 
