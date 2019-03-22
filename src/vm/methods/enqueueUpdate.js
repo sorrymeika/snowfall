@@ -8,8 +8,22 @@ var rendering = false;
 var renderers = [];
 var rendererStore = {};
 
-const resolvedPromise = Promise.resolve();
-const doAsap = () => resolvedPromise.then(flushCallbacks);
+const defer = Promise.prototype.then.bind(Promise.resolve());
+const doAsap = () => defer(flushCallbacks);
+
+// let requestAnimationFrameWithTimeout = process.env.NODE_ENV === 'test' ? defer : function (callback) {
+//     let rafId,
+//         timerId;
+//     rafId = requestAnimationFrame(() => {
+//         clearTimeout(timerId);
+//         callback();
+//     });
+
+//     timerId = setTimeout(() => {
+//         cancelAnimationFrame(rafId);
+//         callback();
+//     }, 100);
+// };
 
 function flushCallbacks() {
     // console.time('flushCallbacks');
@@ -191,12 +205,14 @@ function addRenderer(item) {
 function render() {
     rendering = true;
     const renderId = currentRenderId;
-    resolvedPromise.then(() => {
+
+    defer(() => {
         if (renderId === currentRenderId) {
             // console.time('render');
+            const views = renderers;
 
-            for (let i = 0; i < renderers.length; i++) {
-                const target = renderers[i];
+            for (let i = 0; i < views.length; i++) {
+                const target = views[i];
                 if (!target.state.rendered) {
                     if (process.env.NODE_ENV === 'development') {
                         const prefStart = performance.now();
@@ -209,7 +225,6 @@ function render() {
                     }
                 }
                 target.state.rendered = false;
-                target.trigger('render');
             }
 
             // console.timeEnd('render');
@@ -219,6 +234,10 @@ function render() {
             rendering = false;
             if (nexts) {
                 flushNexts();
+            }
+
+            for (let i = 0; i < views.length; i++) {
+                views[i].trigger('render');
             }
         }
     });

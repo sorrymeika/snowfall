@@ -1,11 +1,17 @@
-import { $, fade, TEXT_NODE } from '../../utils/dom';
-import { isNo, isYes, isNumber, isString } from '../../utils/is';
+import { isYes, isNumber } from '../../utils/is';
 import { createComponent } from './component';
 import { Reaction } from '../Reaction';
 import { get } from '../../utils';
 import { isModel, isCollection } from '../predicates';
 import List from '../List';
-import { createElement, IElement } from './createElement';
+import {
+    IElement,
+    createElement,
+    removeElement,
+    prependElement,
+    insertElementAfter,
+    setAttribute
+} from './element';
 
 export function render(element: IElement, state, data) {
     const { vnode } = element;
@@ -46,12 +52,14 @@ export function render(element: IElement, state, data) {
         }
     } else if (!element.node) {
         if (vnode.type === 'root') {
-            element.node = document.createComment('component root');
+            element.node = document.createDocumentFragment();
+            element.firstChild = document.createComment('component');
+            element.node.appendChild(element.firstChild);
         } else if (vnode.type === 'textNode') {
             element.node = document.createTextNode(vnode.nodeValue || '');
         } else {
-            // var node = isSvg ? document.createElementNS('http://www.w3.org/2000/svg', nodeName) : document.createElement(nodeName);
-            const node = document.createElement(vnode.tagName);
+            const nodeName = vnode.tagName;
+            var node = vnode.isSvg ? document.createElementNS('http://www.w3.org/2000/svg', nodeName) : document.createElement(nodeName);
             const attributes = vnode.attributes;
 
             element.node = node;
@@ -67,6 +75,12 @@ export function render(element: IElement, state, data) {
     const children = element.children;
     if (children) {
         let prevSibling;
+        if (vnode.type === 'root') {
+            prevSibling = element.firstChild;
+        } else if (vnode.type === 'component') {
+            prevSibling = element.component.element.firstChild;
+        }
+        element.childElements = [];
         for (let i = 0; i < children.length; i++) {
             const child = render(children[i], state, data);
             if (child) {
@@ -75,6 +89,7 @@ export function render(element: IElement, state, data) {
                 } else {
                     insertElementAfter(prevSibling, child);
                 }
+                element.childElements.push(child);
                 prevSibling = child;
             }
         }
@@ -261,58 +276,6 @@ function renderRepeat(element: IElement, state, data) {
     return element;
 }
 
-function isComponent(element) {
-    return element.vnode && element.vnode.type === 'component';
-}
-
-function prependElement(parentElement, element) {
-    if (isComponent(element)) {
-        element.component.prependTo(parentElement);
-    } else {
-        const parentNode = parentElement.node;
-        const firstChild = parentNode.firstChild;
-        if (firstChild) {
-            if (firstChild !== element.node) {
-                parentNode.insertBefore(element.node, firstChild);
-            }
-        } else {
-            parentNode.appendChild(element.node);
-        }
-    }
-}
-
-function insertElementAfter(destElement, element) {
-    if (isComponent(destElement)) {
-        destElement.component.after(element);
-    } else if (isComponent(element)) {
-        element.component.insertAfter(element);
-    } else {
-        let destNode,
-            newNode;
-
-        destNode = destElement.vnode
-            ? destElement.node
-            : destElement;
-
-        newNode = element.vnode
-            ? element.node
-            : element;
-
-        if (destNode.nextSibling != newNode) {
-            destNode.nextSibling
-                ? destNode.parentNode.insertBefore(newNode, destNode.nextSibling)
-                : destNode.parentNode.appendChild(newNode);
-        }
-    }
-}
-
-function removeElement(element) {
-    const node = element.node;
-    if (node && node.parentNode) {
-        node.parentNode.removeChild(node);
-    }
-}
-
 function invoke(element, data, fid) {
     return element.root.fns[fid](data);
 }
@@ -322,145 +285,4 @@ function autoSet(element, name, data, fid) {
     const reaction = new Reaction(autorun);
     reaction.__propAutoSet = autorun;
     return reaction;
-}
-
-function setAttribute(element, attrName, val) {
-    const el = element.node;
-
-    switch (attrName) {
-        case 'nodeValue':
-            setTextNode(element, val);
-            break;
-        case 'value':
-            var nodeName = el.nodeName;
-            if (nodeName === 'INPUT' || nodeName === 'SELECT' || nodeName === 'TEXTAREA') {
-                if (el.value != val || (el.value === '' && val === 0)) {
-                    el.value = val;
-                }
-            } else
-                el.setAttribute(attrName, val);
-            break;
-        case 'html':
-        case 'sn-html':
-            el.innerHTML = val;
-            break;
-        case 'sn-visible':
-        case 'display':
-            el.style.display = isNo(val) ? 'none' : val == 'block' || val == 'inline' || val == 'inline-block' ? val : '';
-            break;
-        case 'sn-display':
-            fade(el, val);
-            break;
-        case 'classname':
-        case 'class':
-            el.className = val;
-            break;
-        case 'sn-css':
-            el.style.cssText += val;
-            break;
-        case 'sn-style':
-        case 'style':
-            el.style.cssText = val;
-            break;
-        case 'checked':
-        case 'selected':
-        case 'disabled':
-            (el[attrName] = !!val) ? el.setAttribute(attrName, attrName) : el.removeAttribute(attrName);
-            break;
-        case 'sn-image':
-        case 'src':
-            if (val) {
-                el.src = val;
-            } else {
-                el.removeAttribute('src');
-            }
-            break;
-        case 'sn-src':
-            if (val) {
-                if (el.src || el.nodeName !== 'IMG') {
-                    el.src = val;
-                } else {
-                    $(el)
-                        .one('load error', function (e) {
-                            if (e.type === 'error') {
-                                el.removeAttribute('src');
-                                el.style.opacity = "";
-                            } else {
-                                $(el).animate({
-                                    opacity: 1
-                                }, 200);
-                            }
-                        })
-                        .css({
-                            opacity: .3
-                        })
-                        .attr({
-                            src: val
-                        });
-                }
-            } else {
-                el.removeAttribute('src');
-            }
-            break;
-        default:
-            val === null || val === false ? el.removeAttribute(attrName) : el.setAttribute(attrName, val);
-            break;
-    }
-}
-
-function setTextNode(element, val) {
-    const tails = element.tails || [];
-
-    if (Array.isArray(val) || (typeof val === 'object' && (val.nodeType || val.vnode) && (val = [val]))) {
-        let cursor = element.node;
-        const newTails = [];
-
-        val.reduce((res, item) => {
-            Array.isArray(item) ? res.push(...item) : res.push(item);
-            return res;
-        }, []).forEach(function (item) {
-            let tail = isString(item)
-                ? findStringTail(tails, item)
-                : findTail(tails, item);
-
-            insertElementAfter(cursor, item);
-            cursor = tail;
-            newTails.push(tail);
-        });
-
-        element.node.nodeValue = '';
-        element.tails = newTails;
-    } else {
-        element.node.nodeValue = val;
-        element.tails = null;
-    }
-
-    tails.forEach(function (tail) {
-        if (tail) {
-            removeElement(tail);
-        }
-    });
-}
-
-function findStringTail(tails, nodeValue) {
-    for (let i = 0; i < tails.length; i++) {
-        let node = tails[i];
-        if (node && node.nodeType === TEXT_NODE) {
-            node.nodeValue = nodeValue;
-            node = undefined;
-            return node;
-        }
-    }
-    return document.createTextNode(nodeValue);
-}
-
-function findTail(tails, element) {
-    for (let i = 0; i < tails.length; i++) {
-        let node = tails[i];
-        if (node == element) {
-            node = undefined;
-            return node;
-        }
-    }
-    return element;
 }

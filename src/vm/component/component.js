@@ -1,8 +1,8 @@
 import { compile } from "./compile";
-import { createElement } from "./createElement";
+import { createElement, syncRootChildElements } from "./element";
 import { render } from "./render";
+import { $ } from "../../utils";
 
-const ROOT_ELEMENT = Symbol('$rootElement$');
 const factories = {};
 
 export function createComponent(tagName) {
@@ -19,31 +19,44 @@ export function component({
         State.prototype.render = function () {
             const data = Object.create(this.state.data);
             data.__state = this;
-            render(this[ROOT_ELEMENT], this, data);
+            render(this.state.rootElement, this, data);
+            this.state.rendered = true;
         };
 
         const componentClass = class Component {
             constructor(data) {
                 this.state = new State(data);
-                this.element = this.state[ROOT_ELEMENT] = createElement(rootVNode);
+                this.element = this.state.state.rootElement = createElement(rootVNode);
             }
 
             appendTo(element) {
+                $(this.element.firstChild).appendTo(element);
+                syncRootChildElements(this.element);
             }
 
             prependTo(element) {
+                $(this.element.firstChild).prependTo(element);
+                syncRootChildElements(this.element);
             }
 
             before(element) {
+                $(this.element.firstChild).before(element);
+                syncRootChildElements(this.element);
             }
 
             after(element) {
+                $(this.element.firstChild).after(element);
+                syncRootChildElements(this.element);
             }
 
             insertAfter(element) {
+                $(this.element.firstChild).insertAfter(element);
+                syncRootChildElements(this.element);
             }
 
             insertBefore(element) {
+                $(this.element.firstChild).insertBefore(element);
+                syncRootChildElements(this.element);
             }
 
             set(data) {
