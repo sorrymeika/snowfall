@@ -191,13 +191,12 @@ export class EventCompiler {
 export class EventAttributeCompiler {
     constructor(template) {
         this.template = template;
-        this.eventId = template.viewModel.eventId;
     }
 
     compile(el, attr, val, root) {
         if (attr == 'sn-model') {
             el.removeAttribute(attr);
-            el.setAttribute(this.eventId, val);
+            el.setAttribute(this.template.viewModel.eventId, val);
             root.snRespondInput = true;
             return false;
         }

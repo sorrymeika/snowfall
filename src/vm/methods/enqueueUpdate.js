@@ -202,6 +202,8 @@ function addRenderer(item) {
     }
 }
 
+let totalRenderingCount = 0;
+
 function render() {
     rendering = true;
     const renderId = currentRenderId;
@@ -210,46 +212,57 @@ function render() {
         if (renderId === currentRenderId) {
             // console.time('render');
             const views = renderers;
+            const nextCallbacks = nexts;
+            let currentRenderingCount = 0;
+
+            // 清空next tick functions
+            nexts = null;
 
             for (let i = 0; i < views.length; i++) {
+                totalRenderingCount++;
+                currentRenderingCount++;
                 const target = views[i];
-                if (!target.state.rendered) {
-                    if (process.env.NODE_ENV === 'development') {
-                        const prefStart = performance.now();
-                        target.render();
-                        if (performance.now() - prefStart > 15) {
-                            console.warn('slow render:', performance.now() - prefStart, target);
+                defer(() => {
+                    if (!target.state.rendered) {
+                        if (process.env.NODE_ENV === 'development') {
+                            const prefStart = performance.now();
+                            target.render();
+                            if (performance.now() - prefStart >= 15) {
+                                console.warn('slow render:', performance.now() - prefStart, target);
+                            }
+                        } else {
+                            target.render();
                         }
-                    } else {
-                        target.render();
                     }
-                }
-                target.state.rendered = false;
+                    target.state.rendered = false;
+
+                    totalRenderingCount--;
+                    if (totalRenderingCount === 0) {
+                        rendering = false;
+                    }
+
+                    currentRenderingCount--;
+                    if (currentRenderingCount === 0) {
+                        if (nextCallbacks) {
+                            flushFunctions(nextCallbacks);
+                        }
+                        for (let i = 0; i < views.length; i++) {
+                            views[i].trigger('render');
+                        }
+                    }
+                });
             }
 
             // console.timeEnd('render');
 
             renderers = [];
             rendererStore = {};
-            rendering = false;
-            if (nexts) {
-                flushNexts();
-            }
-
-            for (let i = 0; i < views.length; i++) {
-                views[i].trigger('render');
-            }
         }
     });
 }
 
-function flushNexts() {
+function flushFunctions(fns) {
     let j = -1;
-    const fns = nexts;
-
-    // 清空next tick functions
-    nexts = null;
-
     while (++j < fns.length) {
         fns[j]();
     }
