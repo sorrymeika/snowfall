@@ -181,41 +181,43 @@ export class Model extends Observer {
                 (attrs = {})[key] = val;
             }
         }
-        var isChange = false;
-        var oldAttributes = state.data;
-        var attributes;
+
+        const oldAttributes = state.data;
+        const attributes = {};
+        let isChange = false;
 
         if (oldAttributes === null || !isPlainObject(oldAttributes)) {
-            attributes = {};
             isChange = true;
         } else {
-            attributes = Object.assign({}, oldAttributes);
-        }
-
-        state.data = attributes;
-        state.setting = true;
-
-        if (renew) {
-            for (var name in attributes) {
-                if (attrs[name] === undefined) {
+            for (let name in oldAttributes) {
+                attributes[name] = oldAttributes[name];
+                if (renew && attrs[name] === undefined) {
                     attrs[name] = null;
                 }
             }
         }
 
-        var changes = [];
-        var origin;
-        var value;
-        var observableProps = state.observableProps;
+        state.data = attributes;
+        state.setting = true;
 
-        for (var attr in attrs) {
-            origin = observableProps[attr] || attributes[attr];
-            value = attrs[attr];
+        const changes = [];
+        const observableProps = state.observableProps;
+
+        for (let attr in attrs) {
+            const origin = observableProps[attr] || attributes[attr];
+            let value = attrs[attr];
             if (value && value[source]) {
                 value = value[source];
             }
+
             if (origin !== value) {
-                if (isObservable(value)) {
+                if (value == null) {
+                    attributes[attr] = observableProps[attr] = value;
+                    if (isObservable(origin)) {
+                        disconnect(this, origin);
+                    }
+                    isChange = true;
+                } else if (isObservable(value)) {
                     observableProps[attr] = value;
                     attributes[attr] = value.state.data;
 
@@ -392,37 +394,56 @@ function parseChanges(attrs) {
 }
 
 if (process.env.NODE_ENV === 'development') {
-    const model = new Model();
+    setTimeout(() => {
+        const model = new Model();
 
-    model.set(null);
-    console.assert(model.attributes === null, 'model.attributes must be null, now is ' + model.attributes);
-    console.assert(model.valueOf() === null, 'model.valueOf() must be null, now is ' + model.valueOf());
-    console.assert(model + '' === 'null', 'model.toString() must be `null`, now is ' + model.toString());
+        model.set(null);
+        console.assert(model.attributes === null, 'model.attributes must be null, now is ' + model.attributes);
+        console.assert(model.valueOf() === null, 'model.valueOf() must be null, now is ' + model.valueOf());
+        console.assert(model + '' === 'null', 'model.toString() must be `null`, now is ' + model.toString());
 
-    model.set(true);
-    console.assert(model.attributes === true, 'model.attributes must be true, now is ' + model.attributes);
-    console.assert(model.valueOf() === true, 'model.valueOf() must be true, now is ' + model.valueOf());
-    console.assert(model + '' === 'true', 'model.toString() must be `true`, now is ' + model.toString());
+        model.set(true);
+        console.assert(model.attributes === true, 'model.attributes must be true, now is ' + model.attributes);
+        console.assert(model.valueOf() === true, 'model.valueOf() must be true, now is ' + model.valueOf());
+        console.assert(model + '' === 'true', 'model.toString() must be `true`, now is ' + model.toString());
 
-    model.set(false);
-    console.assert(model.attributes === false, 'model.attributes must be false, now is ' + model.attributes);
-    console.assert(model.valueOf() === false, 'model.valueOf() must be false, now is ' + model.valueOf());
-    console.assert(model + '' === 'false', 'model.toString() must be `false`, now is ' + model.toString());
+        model.set(false);
+        console.assert(model.attributes === false, 'model.attributes must be false, now is ' + model.attributes);
+        console.assert(model.valueOf() === false, 'model.valueOf() must be false, now is ' + model.valueOf());
+        console.assert(model + '' === 'false', 'model.toString() must be `false`, now is ' + model.toString());
 
-    model.set(undefined);
-    console.assert(model.attributes === undefined, 'model.attributes must be undefined, now is ' + model.attributes);
-    console.assert(model.valueOf() === undefined, 'model.valueOf() must be undefined, now is ' + model.valueOf());
-    console.assert(model + '' === 'undefined', 'model.toString() must be `undefined`, now is ' + model.toString());
+        model.set(undefined);
+        console.assert(model.attributes === undefined, 'model.attributes must be undefined, now is ' + model.attributes);
+        console.assert(model.valueOf() === undefined, 'model.valueOf() must be undefined, now is ' + model.valueOf());
+        console.assert(model + '' === 'undefined', 'model.toString() must be `undefined`, now is ' + model.toString());
 
-    model.set(0);
-    console.assert(model.attributes === 0, 'model.attributes must be 0, now is ' + model.attributes);
-    console.assert(model.valueOf() === 0, 'model.valueOf() must be 0, now is ' + model.valueOf());
-    console.assert(model + '' === '0', 'model.toString() must be `0`, now is ' + model.toString());
-    console.assert(model + 5 === 5, 'model + 5 must be `5`, now is ' + model.toString());
+        model.set(0);
+        console.assert(model.attributes === 0, 'model.attributes must be 0, now is ' + model.attributes);
+        console.assert(model.valueOf() === 0, 'model.valueOf() must be 0, now is ' + model.valueOf());
+        console.assert(model + '' === '0', 'model.toString() must be `0`, now is ' + model.toString());
+        console.assert(model + 5 === 5, 'model + 5 must be `5`, now is ' + model.toString());
 
-    model.set(1);
-    console.assert(model.attributes === 1, 'model.attributes must be 0, now is ' + model.attributes);
-    console.assert(model.valueOf() === 1, 'model.valueOf() must be 0, now is ' + model.valueOf());
-    console.assert(model + '1' === '11', 'model + "1" must be `11`, now is ' + (model + '1'));
-    console.assert(model + 5 === 6, 'model + 6 must be `6`, now is ' + (model + 5));
+        model.set(1);
+        console.assert(model.attributes === 1, 'model.attributes must be 0, now is ' + model.attributes);
+        console.assert(model.valueOf() === 1, 'model.valueOf() must be 0, now is ' + model.valueOf());
+        console.assert(model + '1' === '11', 'model + "1" must be `11`, now is ' + (model + '1'));
+        console.assert(model + 5 === 6, 'model + 6 must be `6`, now is ' + (model + 5));
+
+        model.set({
+            name: 1
+        });
+        console.assert(model.attributes.name === 1, 'model.attributes.name must be 1, now is ' + model.attributes);
+
+        model.set({
+            name: {
+                id: 1
+            }
+        });
+        console.assert(model.attributes.name.id === 1, 'model.attributes.name.id must be 1, now is ' + model.attributes);
+
+        model.set({
+            name: null
+        });
+        console.assert(model.attributes.name === null, 'model.attributes.name must be null, now is ' + model.attributes);
+    }, 0);
 }

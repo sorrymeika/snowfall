@@ -148,6 +148,13 @@ function bindWithMutations(collection) {
     collection.state.data.withMutations = collection.state.withMutations;
 }
 
+export function withMutations(observer, fn) {
+    collectionWillUpdate(observer);
+    fn();
+    collectionDidUpdate(observer);
+    return observer;
+}
+
 export class Collection extends Observer {
     static createItem(parent, index, data) {
         return new Model(data, index, parent);

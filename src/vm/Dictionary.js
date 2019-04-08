@@ -39,7 +39,7 @@ function addChange(attributes, key, value, originValue, changes) {
     attributes[key] = value;
 }
 
-export default class Dictionary extends Observer {
+export class Dictionary extends Observer {
     static isDictionary = (dictionary) => {
         return dictionary instanceof Dictionary;
     }

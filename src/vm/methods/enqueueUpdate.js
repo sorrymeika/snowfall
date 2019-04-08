@@ -202,8 +202,6 @@ function addRenderer(item) {
     }
 }
 
-let totalRenderingCount = 0;
-
 function render() {
     rendering = true;
     const renderId = currentRenderId;
@@ -215,11 +213,12 @@ function render() {
             const nextCallbacks = nexts;
             let currentRenderingCount = 0;
 
-            // 清空next tick functions
+            renderers = [];
+            rendererStore = {};
             nexts = null;
+            rendering = false;
 
             for (let i = 0; i < views.length; i++) {
-                totalRenderingCount++;
                 currentRenderingCount++;
                 const target = views[i];
                 defer(() => {
@@ -236,27 +235,18 @@ function render() {
                     }
                     target.state.rendered = false;
 
-                    totalRenderingCount--;
-                    if (totalRenderingCount === 0) {
-                        rendering = false;
-                    }
-
                     currentRenderingCount--;
                     if (currentRenderingCount === 0) {
-                        if (nextCallbacks) {
-                            flushFunctions(nextCallbacks);
-                        }
                         for (let i = 0; i < views.length; i++) {
                             views[i].trigger('render');
+                        }
+                        if (nextCallbacks) {
+                            flushFunctions(nextCallbacks);
                         }
                     }
                 });
             }
-
             // console.timeEnd('render');
-
-            renderers = [];
-            rendererStore = {};
         }
     });
 }

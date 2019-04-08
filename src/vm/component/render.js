@@ -3,7 +3,7 @@ import { createComponent } from './component';
 import { Reaction } from '../Reaction';
 import { get } from '../../utils';
 import { isModel, isCollection } from '../predicates';
-import List from '../List';
+import { ObserverList } from '../List';
 import {
     IElement,
     createElement,
@@ -163,7 +163,7 @@ function renderRepeat(element: IElement, state, data) {
 
     if (!isCollection(collection)) {
         const array = collection;
-        collection = element.collection || (element.collection = new List());
+        collection = element.collection || (element.collection = new ObserverList());
         collection.set(array);
     }
 

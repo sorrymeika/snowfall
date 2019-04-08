@@ -1,4 +1,4 @@
-import { isCollection } from "../predicates";
+import { isCollection, isList } from "../predicates";
 import { getMemberName } from "./connect";
 
 export function updateRefs(model) {
@@ -17,7 +17,7 @@ function bubbleUpdate(parent, model, key, value) {
     const { state } = parent;
     if (state[key] !== value) {
         if (!state.setting) {
-            if (isCollection(parent)) {
+            if (isCollection(parent) || isList(parent)) {
                 if (!state.inEach || (!state.arrayIsNew && (state.arrayIsNew = true))) {
                     state.data = [...state.data];
                     updateRefs(parent);

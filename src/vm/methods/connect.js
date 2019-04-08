@@ -1,5 +1,5 @@
 export function connect(parent, child, name) {
-    if (!child.state.mapper[parent.state.id]) {
+    if (child.state.mapper[parent.state.id] === undefined) {
         !child.state.parents && (child.state.parents = []);
         child.state.parents.push(parent);
         setMapper(parent, child, name);

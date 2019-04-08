@@ -1,6 +1,7 @@
 import { Observer } from "./Observer";
 import { Model } from "./Model";
 import { Collection } from "./Collection";
+import List from "./List";
 
 export function isObserver(observer) {
     return observer && observer.constructor === Observer;
@@ -18,6 +19,6 @@ export function isCollection(collection) {
     return collection instanceof Collection;
 }
 
-export function isModelOrCollection(model) {
-    return isModel(model) || isCollection(model);
+export function isList(list) {
+    return list instanceof List;
 }
