@@ -1,5 +1,5 @@
 import '../../libs/zepto';
-import { isArray, isNo } from './is';
+import { isNo } from './is';
 import style from './style';
 
 export const $ = window.$;
@@ -9,8 +9,6 @@ export const TRANSITION_END = $.fx.transitionEnd;
 export const TEXT_NODE = document.TEXT_NODE || 3;
 export const COMMENT_NODE = document.COMMENT_NODE || 8;
 export const ELEMENT_NODE = document.ELEMENT_NODE || 1;
-
-const ConstuctorOf$ = $.zepto ? $.zepto.Z : $.fn.constructor;
 
 export function getElementOffsetTop(el) {
     var parent = el.offsetParent;
@@ -82,12 +80,6 @@ export function cloneElement(node, each) {
 export function eachElement(el, fn) {
     if (!el) return;
 
-    if (isArray(el) || el instanceof ConstuctorOf$) {
-        for (var i = 0, len = el.length; i < len; i++) {
-            eachElement(el[i], fn);
-        }
-        return;
-    }
     var stack = [];
     var firstLoop = true;
 

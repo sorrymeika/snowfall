@@ -6,6 +6,7 @@ import {
     createNodeHandler,
     createAttributeHandler
 } from './factories';
+import getFunctionArg from './getFunctionArg';
 
 function isExpression(val) {
     return val.indexOf("{") !== -1 && val.lastIndexOf("}") !== -1;
@@ -89,8 +90,8 @@ export class TemplateCompiler {
         }
     }
 
-    updateNode(node) {
-        return this.nodeHandler.update(node);
+    updateNode(node, data) {
+        return this.nodeHandler.update(node, data);
     }
 
     updateAttributes(nodeData) {
@@ -100,10 +101,11 @@ export class TemplateCompiler {
 
         var snValues = (el.snValues || (el.snValues = []));
         var attributeHandler = this.attributeHandler;
+        var args = getFunctionArg(el, nodeData.data);
 
         for (var i = 0, n = snAttributes.length; i < n; i += 2) {
             var attrName = snAttributes[i];
-            var val = this.executeFunction(snAttributes[i + 1], nodeData.data);
+            var val = this.executeFunction(snAttributes[i + 1], args);
 
             if (attributeHandler.beforeUpdate(nodeData, attrName, val) === false) {
                 continue;
@@ -202,10 +204,6 @@ export class TemplateCompiler {
 
     executeFunction(fid, data) {
         return this.functionCompiler.executeFunction(fid, data);
-    }
-
-    getFunctionArg(node, data) {
-        return this.functionCompiler.getFunctionArg(node, data);
     }
 }
 

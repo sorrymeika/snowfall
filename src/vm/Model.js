@@ -329,7 +329,7 @@ export class Model extends Observer {
                 this.state.hasOnChangeListener = true;
                 const cb = (e, oldValue, newValue) => {
                     if (e.target === this) {
-                        return fn.call(this, e, oldValue, newValue);
+                        return fn.call(this, newValue, oldValue);
                     }
                 };
                 cb._cb = fn;

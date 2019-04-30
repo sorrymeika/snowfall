@@ -1,11 +1,13 @@
 import { TEXT_NODE } from "../../utils/dom";
+import getFunctionArg from "./getFunctionArg";
 
 class NodeData {
-    constructor(template, node) {
+    constructor(template, node, data) {
         this.template = template;
         this.node = node;
         this.nodeType = node.nodeType;
         this._ref = node;
+        this._data = data;
     }
 
     setRef(_ref) {
@@ -17,9 +19,7 @@ class NodeData {
     }
 
     get data() {
-        return this._data
-            ? this._data
-            : this.template.getFunctionArg(this.node, this.node.snData);
+        return this._data;
     }
 }
 
@@ -41,8 +41,8 @@ export default class NodeHandler {
         }
     }
 
-    update(node) {
-        var nodeData = new NodeData(this.template, node);
+    update(node, data) {
+        var nodeData = new NodeData(this.template, node, getFunctionArg(node, data));
         var res;
         var compilers = this.compilers;
 

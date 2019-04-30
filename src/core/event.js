@@ -120,7 +120,8 @@ const EventEmitterProto = {
             var i = -1;
             var stoped;
 
-            typeof e === 'string' && (e = new Event(e));
+            if (typeof e === 'string') e = new Event(e);
+            else if (!(e instanceof Event)) e = new Event(e.type, e);
 
             if (!e.target) e.target = this;
 

@@ -2,7 +2,7 @@ import { Observer } from "./Observer";
 import { isArray } from '../utils/is';
 import { connect, disconnect } from './methods/connect';
 import { source } from './attributes/symbols';
-import { Collection, withMutations } from './Collection';
+import { Collection, withMutations, initCollection } from './Collection';
 
 export class ObserverList extends Collection {
     static createItem(data, index, parent) {
@@ -13,21 +13,7 @@ export class ObserverList extends Collection {
 export default class List extends Observer {
     constructor(array, attributeName, parent) {
         super();
-
-        this.state.withMutations = (fn) => {
-            fn(this);
-            return this.state.data;
-        };
-        this.state.initialized = false;
-        this.state.data = [];
-        this.state.data.withMutations = this.state.withMutations;
-
-        if (parent) {
-            connect(parent, this, attributeName);
-        }
-
-        if (array && array.length) this.add(array);
-        this.state.initialized = true;
+        initCollection.call(this, array, attributeName, parent);
     }
 
     get(i) {

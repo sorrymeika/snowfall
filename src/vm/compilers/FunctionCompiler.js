@@ -1,6 +1,5 @@
 import * as util from '../../utils';
 import { isObservable } from '../predicates';
-import * as $filter from './filter';
 import compileExpression from './compileExpression';
 
 var vmExpressionsId = 1;
@@ -44,25 +43,6 @@ export default class FunctionCompiler {
         this.vmCodes += expId + ':function($data){' + res.code + '},';
 
         return expId;
-    }
-
-    getFunctionArg(element, snData) {
-        var data = Object.create(this.viewModel.state.data);
-
-        data.srcElement = element;
-        data.util = util;
-        data.$filter = $filter;
-
-        if (snData) {
-            for (var key in snData) {
-                var val = snData[key];
-                data[key] = isObservable(val)
-                    ? val.state.data
-                    : val;
-            }
-        }
-
-        return data;
     }
 
     executeFunction(fid, data) {

@@ -11,19 +11,23 @@ var rendererStore = {};
 const defer = Promise.prototype.then.bind(Promise.resolve());
 const doAsap = () => defer(flushCallbacks);
 
-// let requestAnimationFrameWithTimeout = process.env.NODE_ENV === 'test' ? defer : function (callback) {
-//     let rafId,
-//         timerId;
-//     rafId = requestAnimationFrame(() => {
-//         clearTimeout(timerId);
-//         callback();
-//     });
+const getCurrentTime = typeof performance !== 'undefined'
+    ? () => performance.now()
+    : () => Date.now();
 
-//     timerId = setTimeout(() => {
-//         cancelAnimationFrame(rafId);
-//         callback();
-//     }, 100);
-// };
+const requestAnimationFrameWithTimeout = process.env.NODE_ENV === 'test' ? defer : function (callback) {
+    let rafId,
+        timerId;
+    rafId = requestAnimationFrame(() => {
+        clearTimeout(timerId);
+        callback();
+    });
+
+    timerId = setTimeout(() => {
+        cancelAnimationFrame(rafId);
+        callback();
+    }, 100);
+};
 
 function flushCallbacks() {
     // console.time('flushCallbacks');
@@ -54,13 +58,13 @@ let dirts;
 let flags;
 let flushing = false;
 let changed;
-let nexts;
 
 export function enqueueInit(observer) {
     initializers[observer.state.id] = observer;
     initializerIds.push(observer.state.id);
     if (doingInit) return;
     doingInit = true;
+    rendering = true;
 
     const renderId = currentRenderId;
     asap(() => {
@@ -115,6 +119,7 @@ export function enqueueUpdate(dirt) {
             flags = {};
             if (!flushing) {
                 currentRenderId++;
+                rendering = true;
                 asap(flushDirts);
             }
         }
@@ -203,52 +208,125 @@ function addRenderer(item) {
 }
 
 function render() {
-    rendering = true;
     const renderId = currentRenderId;
 
     defer(() => {
         if (renderId === currentRenderId) {
-            // console.time('render');
             const views = renderers;
-            const nextCallbacks = nexts;
-            let currentRenderingCount = 0;
 
             renderers = [];
             rendererStore = {};
-            nexts = null;
-            rendering = false;
 
             for (let i = 0; i < views.length; i++) {
-                currentRenderingCount++;
-                const target = views[i];
-                defer(() => {
-                    if (!target.state.rendered) {
-                        if (process.env.NODE_ENV === 'development') {
-                            const prefStart = performance.now();
-                            target.render();
-                            if (performance.now() - prefStart >= 15) {
-                                console.warn('slow render:', performance.now() - prefStart, target);
-                            }
-                        } else {
-                            target.render();
-                        }
-                    }
-                    target.state.rendered = false;
-
-                    currentRenderingCount--;
-                    if (currentRenderingCount === 0) {
-                        for (let i = 0; i < views.length; i++) {
-                            views[i].trigger('render');
-                        }
-                        if (nextCallbacks) {
-                            flushFunctions(nextCallbacks);
-                        }
-                    }
-                });
+                views[i].trigger('update');
             }
-            // console.timeEnd('render');
+
+            renderViews(views);
         }
     });
+}
+
+function newFiber() {
+    return {
+        index: 0,
+        views: [],
+        viewIds: {},
+        renderedIds: {},
+        renderedViews: [],
+        current: null
+    };
+}
+
+let nextCallbacks;
+let fiber = newFiber();
+let isFlushingViews = false;
+let flushingStartTime = 0;
+let renderStartTime;
+
+function renderViews(newViews) {
+    const { views, viewIds } = fiber;
+    for (let i = 0; i < newViews.length; i++) {
+        const newView = newViews[i];
+
+        if (!viewIds[newView.state.id]) {
+            views.push(newView);
+            viewIds[newView.state.id] = true;
+        }
+    }
+
+    if (isFlushingViews) {
+        return;
+    }
+    isFlushingViews = true;
+    renderStartTime = getCurrentTime();
+
+    scheduleFlushViews();
+}
+
+function scheduleFlushViews() {
+    flushingStartTime = getCurrentTime();
+    requestAnimationFrame(flushViews);
+}
+
+export function shouldContinueFlushingViews() {
+    return getCurrentTime() - flushingStartTime < 33;
+}
+
+function flushViews() {
+    if (!shouldContinueFlushingViews()) {
+        scheduleFlushViews();
+        return;
+    }
+
+    const { index, views, viewIds, renderedViews, renderedIds } = fiber;
+
+    for (let i = index; i < views.length; i++) {
+        const target = views[i];
+        const id = target.state.id;
+
+        viewIds[id] = false;
+
+        if (!target.state.rendered) {
+            target.render(fiber);
+            if (fiber.current) {
+                target.state.rendered = false;
+                scheduleFlushViews();
+                return;
+            }
+            if (!renderedIds[id]) {
+                renderedViews.push(target);
+                renderedIds[id] = true;
+            }
+        }
+        target.state.rendered = false;
+
+        fiber.index = i + 1;
+        fiber.current = null;
+
+        if (!shouldContinueFlushingViews()) {
+            scheduleFlushViews();
+            return;
+        }
+    }
+
+    const callbacks = nextCallbacks;
+
+    rendering = false;
+    nextCallbacks = null;
+    isFlushingViews = false;
+    fiber = newFiber();
+
+    for (let i = 0; i < renderedViews.length; i++) {
+        renderedViews[i].trigger('render');
+    }
+
+    if (callbacks) {
+        flushFunctions(callbacks);
+    }
+
+    if (getCurrentTime() - renderStartTime > 50) {
+        console.log('vm renderred', getCurrentTime() - renderStartTime);
+    }
 }
 
 function flushFunctions(fns) {
@@ -259,12 +337,13 @@ function flushFunctions(fns) {
 }
 
 export function nextTick(cb) {
-    if (dirts || flushing || doingInit || rendering) {
-        nexts
-            ? nexts.push(cb)
-            : (nexts = [cb]);
-    } else if (nexts) {
-        nexts.push(cb);
+    if (rendering) {
+        nextCallbacks
+            ? nextCallbacks.push(cb)
+            : (nextCallbacks = [cb]);
+    } else if (nextCallbacks) {
+        console.error('why nextCallbacks is not empty!!!');
+        nextCallbacks.push(cb);
     } else {
         cb();
         return false;

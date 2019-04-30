@@ -1,11 +1,13 @@
 import * as objectUtils from '../utils/object';
-import { $, eachElement } from '../utils/dom';
+import { $ } from '../utils/dom';
+import * as $filter from './compilers/filter';
+import * as util from '../utils';
 
 import { unbindEvents, bindEvents } from './compilers/events';
 import { TemplateCompiler } from './compilers/template';
 
 import { Model } from './Model';
-import { enqueueUpdate } from './methods/enqueueUpdate';
+import { enqueueUpdate, shouldContinueFlushingViews } from './methods/enqueueUpdate';
 
 function compileNewTemplate(viewModel, template) {
     var $element = $(template);
@@ -50,6 +52,43 @@ function findOwnNode(viewModel, node) {
         }
     }
     return node;
+}
+
+
+function eachElement(el, data, fn, { stack = [], firstLoop = true } = {}) {
+    if (!el) return;
+
+    while (el) {
+        const res = fn(el, el.snData || data);
+        if (res && res.return === true) {
+            return {
+                firstLoop,
+                stack,
+                el,
+                data
+            };
+        }
+
+        const ignoreChildNodes = res === false || (res && res.ignoreChildNodes);
+        const nextSibling = res && res.nextSibling
+            ? res.nextSibling
+            : firstLoop || (res && res.nextSibling) === null
+                ? null
+                : el.nextSibling;
+
+        if (firstLoop) firstLoop = false;
+
+        if (!ignoreChildNodes && el.firstChild) {
+            if (nextSibling) {
+                stack.push(nextSibling);
+            }
+            el = el.firstChild;
+        } else if (nextSibling) {
+            el = nextSibling;
+        } else {
+            el = stack.pop();
+        }
+    }
 }
 
 export class ViewModel extends Model {
@@ -228,9 +267,11 @@ export class ViewModel extends Model {
         var attrs = keys.split('.');
         var model;
         var name = attrs[0];
+        var aliaName = '__alias__' + name + '__';
 
-        if (el.snData && name in el.snData) {
-            model = el.snData[attrs.shift()];
+        if (el.snData && aliaName in el.snData) {
+            attrs.shift();
+            model = el.snData[aliaName];
         } else {
             model = this;
         }
@@ -255,21 +296,71 @@ export class ViewModel extends Model {
         return model.get(attrs);
     }
 
-    render() {
+    render(fiber) {
         this.state.rendered = true;
-        this.viewWillUpdate && this.viewWillUpdate();
 
-        var compiler = this.compiler;
+        let shouldReturn = false;
+        const compiler = this.compiler;
 
-        this.refs = {};
-        this.$el && eachElement(this.$el, (el) => {
-            if ((el.snViewModel && el.snViewModel != this)) return false;
+        const renderRoot = (i, root, data, cache) => {
+            const result = eachElement(root, data, (el, data) => {
+                if ((el.snViewModel && el.snViewModel != this)) return false;
 
-            return compiler.updateNode(el);
-        });
+                if (!shouldContinueFlushingViews()) {
+                    return {
+                        return: true
+                    };
+                }
 
-        this.trigger('viewDidUpdate');
-        this.viewDidUpdate && this.viewDidUpdate();
+                return compiler.updateNode(el, data);
+            }, cache);
+
+            if (result) {
+                result.index = i;
+                fiber.current = result;
+                shouldReturn = true;
+
+                return false;
+            } else {
+                fiber.current = null;
+            }
+        };
+
+        if (fiber.current) {
+            const {
+                index,
+                stack,
+                firstLoop,
+                el,
+                data
+            } = fiber.current;
+
+            if (renderRoot(index, el, data, { stack, firstLoop }) !== false) {
+                for (let i = index + 1; i < this.$el.length; i++) {
+                    if (renderRoot(i, this.$el[i], data) === false) {
+                        break;
+                    }
+                }
+            }
+        } else {
+            this.viewWillUpdate && this.viewWillUpdate();
+
+            const scope = Object.create(this.state.data);
+
+            scope.util = util;
+            scope.$filter = $filter;
+
+            this.scope = scope;
+            this.refs = {};
+            this.$el && this.$el.each((i, el) => {
+                renderRoot(i, el, scope);
+            });
+        }
+
+        if (!shouldReturn) {
+            this.trigger('viewDidUpdate');
+            this.viewDidUpdate && this.viewDidUpdate();
+        }
     }
 
     destroy() {

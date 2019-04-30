@@ -54,7 +54,8 @@ function collectionDidUpdate(collection) {
         if (state.changed) {
             enqueueUpdate(collection);
             updateRefs(collection);
-            bindWithMutations(collection);
+
+            state.data.withMutations = state.withMutations;
 
             if (process.env.NODE_ENV === 'development') {
                 Object.freeze(state.data);
@@ -144,15 +145,27 @@ function update(collection, arr, comparator, appendUnmatched = true, renewItem =
     return collectionDidUpdate(collection);
 }
 
-function bindWithMutations(collection) {
-    collection.state.data.withMutations = collection.state.withMutations;
-}
-
 export function withMutations(observer, fn) {
     collectionWillUpdate(observer);
     fn();
     collectionDidUpdate(observer);
     return observer;
+}
+
+export function initCollection(array, attributeName, parent) {
+    this.state.initialized = false;
+    this.state.data = [];
+    this.state.data.withMutations = this.state.withMutations = (fn) => {
+        fn(this);
+        return this.state.data;
+    };
+
+    if (parent) {
+        connect(parent, this, attributeName);
+    }
+
+    if (array && array.length) this.add(array);
+    this.state.initialized = true;
 }
 
 export class Collection extends Observer {
@@ -162,20 +175,7 @@ export class Collection extends Observer {
 
     constructor(array, attributeName, parent) {
         super();
-        this.state.withMutations = (fn) => {
-            fn(this);
-            return this.state.data;
-        };
-        this.state.initialized = false;
-        this.state.data = [];
-        bindWithMutations(this);
-
-        if (parent) {
-            connect(parent, this, attributeName);
-        }
-
-        if (array && array.length) this.add(array);
-        this.state.initialized = true;
+        initCollection.call(this, array, attributeName, parent);
     }
 
     get array() {
@@ -546,10 +546,12 @@ export class Collection extends Observer {
 
             if (i !== index) {
                 if (index === -1) {
-                    index = length;
+                    this.state.data.push(this[i].state.data);
+                    this[length] = this[i];
                     length++;
+                } else {
+                    this[index] = this[i];
                 }
-                this[index] = this[i];
                 this[i] = item;
                 this.state.data[i] = item.state.data;
                 setMapper(this, this[i], i);
@@ -857,7 +859,11 @@ Collection.prototype.toArray = Collection.prototype.toJSON;
 
 //     console.log(test.array);
 
-//     test.updateTo([{ id: 1, name: 'b' }], 'id');
+//     test.updateTo([{ id: 3, name: 'b' }], 'id');
+
+//     console.log(test, test.array);
+
+//     test.updateTo([{ id: 1, name: 'b' }, { id: 2, name: 'c' }, { id: 3, name: 'e' }], 'id');
 
 //     console.log(test, test.array);
 // }, 0);

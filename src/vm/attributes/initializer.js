@@ -144,6 +144,15 @@ export default function initializer(obj, name, descriptor) {
 
         hoistStaticMethods(obj.constructor);
 
+        Object.defineProperty(obj, 'asModel', {
+            writable: false,
+            enumerable: false,
+            configurable: false,
+            value: function () {
+                return this[source];
+            }
+        });
+
         Object.defineProperty(obj, source, {
             configurable: true,
             get() {

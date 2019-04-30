@@ -1,5 +1,7 @@
 import { $, TRANSITION_END } from '../../utils/dom';
 import { RE_STRING, codeRegExp } from '../../utils/regex';
+import getFunctionArg from './getFunctionArg';
+import { assert } from '../../../core/log';
 
 const EVENTS = {
     tap: 'tap',
@@ -73,10 +75,13 @@ function getEventProxy(viewModel) {
         if (eventCode == 'false') {
             return false;
         } else if (+eventCode) {
-            var compiler = viewModel.compiler;
-            var args = compiler.getFunctionArg(target, target.snData);
+            var proto = target.snData || viewModel.scope || null;
+            var args = getFunctionArg(target, Object.create(proto));
             args.e = e;
-            return compiler.executeFunction(eventCode, args);
+
+            assert(proto !== null, e.type + target.className + target.innerHTML);
+
+            return viewModel.compiler.executeFunction(eventCode, args);
         }
     });
 }

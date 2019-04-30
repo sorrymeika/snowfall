@@ -7,6 +7,7 @@ import { findChildModel } from '../methods/findChildModel';
 import Collection from '../Collection';
 import NodeUpdateResult from './NodeUpdateResult';
 import { cloneEvents } from './events';
+import getFunctionArg from './getFunctionArg';
 
 const SN_REPEAT = 'sn-repeat';
 
@@ -55,21 +56,11 @@ function updateRepeatView(template, nodeData) {
     var collection = el.snCollection;
     var model;
     var offsetParent = repeatCompiler.offsetParent;
-    var parentSNData = {};
-
-    if (repeatCompiler.parent) {
-        closestElement(el, function (parentNode) {
-            if (parentNode.snRepeatCompiler == repeatCompiler.parent && parentNode.snData) {
-                Object.assign(parentSNData, parentNode.snData);
-                return true;
-            }
-        });
-    }
-
+    var parentSNData = nodeData.data;
     var collectionData;
 
     if (repeatCompiler.isFn) {
-        collectionData = template.executeFunction(repeatCompiler.fid, template.getFunctionArg(el, parentSNData));
+        collectionData = template.executeFunction(repeatCompiler.fid, getFunctionArg(el, parentSNData));
     }
 
     if (!collection) {
@@ -118,13 +109,23 @@ function updateRepeatView(template, nodeData) {
         }
 
         if (!elem) {
-            snData = Object.assign({}, parentSNData);
-            snData[repeatCompiler.alias] = model;
+            snData = Object.create(parentSNData, {
+                [repeatCompiler.alias]: {
+                    get() {
+                        return model.get();
+                    }
+                },
+                ['__alias__' + repeatCompiler.alias + '__']: {
+                    get() {
+                        return model;
+                    }
+                }
+            });
         } else {
-            snData = elem.snData;
+            snData = Object.setPrototypeOf(elem.snData, parentSNData);
         }
 
-        var pass = !repeatCompiler.filter || repeatCompiler.filter.call(viewModel, template.getFunctionArg(elem, snData));
+        var pass = !repeatCompiler.filter || repeatCompiler.filter.call(viewModel, getFunctionArg(elem, snData));
         if (pass) {
             if (!elem) {
                 elem = cloneRepeatElement(viewModel, repeatCompiler.source, snData);
@@ -161,7 +162,7 @@ function updateRepeatView(template, nodeData) {
                 // orderBy=['a',true,someFunctionId,false]
                 orderBy = orderBy.map(function (item) {
                     if (isNumber(item)) {
-                        return template.executeFunction(item, template.getFunctionArg(el, parentSNData));
+                        return template.executeFunction(item, getFunctionArg(el, parentSNData));
                     }
                     return item;
                 });
@@ -202,7 +203,9 @@ function updateRepeatView(template, nodeData) {
         insertElementAfter(cursorElem, elem);
         cursorElem = elem;
 
-        repeatCompiler.loopIndexAlias && (elem.snData[repeatCompiler.loopIndexAlias] = index);
+        if (repeatCompiler.loopIndexAlias) {
+            elem.snData[repeatCompiler.loopIndexAlias] = index;
+        }
     });
 
     var refs = [];
