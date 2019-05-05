@@ -3,10 +3,7 @@ import { getMemberName } from "./connect";
 var taskId;
 var taskCount = 1;
 var callbacks = [];
-var currentRenderId = 0;
 var rendering = false;
-var renderers = [];
-var rendererStore = {};
 
 const defer = Promise.prototype.then.bind(Promise.resolve());
 const doAsap = () => defer(flushCallbacks);
@@ -66,20 +63,16 @@ export function enqueueInit(observer) {
     doingInit = true;
     rendering = true;
 
-    const renderId = currentRenderId;
     asap(() => {
         for (let i = 0; i < initializerIds.length; i++) {
             const item = initializers[initializerIds[i]];
             if (item) {
-                addRenderer(item);
+                enqueueRender(item);
                 bubbleInit(item);
             }
         }
         initializers = {};
         initializerIds = [];
-        if (renderId === currentRenderId && renderers.length) {
-            render();
-        }
         doingInit = false;
     });
 }
@@ -115,11 +108,10 @@ export function enqueueUpdate(dirt) {
         state.dirty = true;
 
         if (!dirts) {
+            rendering = true;
             dirts = [];
             flags = {};
             if (!flushing) {
-                currentRenderId++;
-                rendering = true;
                 asap(flushDirts);
             }
         }
@@ -154,16 +146,14 @@ function flushDirts() {
         changed = null;
     }
     flushing = false;
-
-    render();
 }
 
 function emitChange(target) {
     if (!changed[target.state.id]) {
         changed[target.state.id] = true;
         target.state.updated = true;
-        addRenderer(target);
         target.trigger('datachanged');
+        enqueueRender(target);
         bubbleChange(target);
     }
 }
@@ -200,58 +190,30 @@ export function emitUpdate(target) {
     changed = null;
 }
 
-function addRenderer(item) {
-    if (!rendererStore[item.state.id]) {
-        rendererStore[item.state.id] = true;
-        renderers.push(item);
-    }
-}
-
-function render() {
-    const renderId = currentRenderId;
-
-    defer(() => {
-        if (renderId === currentRenderId) {
-            const views = renderers;
-
-            renderers = [];
-            rendererStore = {};
-
-            for (let i = 0; i < views.length; i++) {
-                views[i].trigger('update');
-            }
-
-            renderViews(views);
-        }
-    });
-}
-
 function newFiber() {
     return {
         index: 0,
         views: [],
         viewIds: {},
-        renderedIds: {},
-        renderedViews: [],
         current: null
     };
 }
 
-let nextCallbacks;
+let nextCallbackIndex = -1;
+let nextCallbacks = [];
 let fiber = newFiber();
 let isFlushingViews = false;
 let flushingStartTime = 0;
 let renderStartTime;
 
-function renderViews(newViews) {
-    const { views, viewIds } = fiber;
-    for (let i = 0; i < newViews.length; i++) {
-        const newView = newViews[i];
+function enqueueRender(newView) {
+    const { views, viewIds, current } = fiber;
 
-        if (!viewIds[newView.state.id]) {
-            views.push(newView);
-            viewIds[newView.state.id] = true;
-        }
+    if (current && current.target === newView) {
+        fiber.current = null;
+    } else if (!viewIds[newView.state.id]) {
+        views.push(newView);
+        viewIds[newView.state.id] = true;
     }
 
     if (isFlushingViews) {
@@ -265,7 +227,7 @@ function renderViews(newViews) {
 
 function scheduleFlushViews() {
     flushingStartTime = getCurrentTime();
-    requestAnimationFrame(flushViews);
+    requestAnimationFrameWithTimeout(flushViews);
 }
 
 export function shouldContinueFlushingViews() {
@@ -278,7 +240,7 @@ function flushViews() {
         return;
     }
 
-    const { index, views, viewIds, renderedViews, renderedIds } = fiber;
+    const { index, views, viewIds } = fiber;
 
     for (let i = index; i < views.length; i++) {
         const target = views[i];
@@ -293,12 +255,9 @@ function flushViews() {
                 scheduleFlushViews();
                 return;
             }
-            if (!renderedIds[id]) {
-                renderedViews.push(target);
-                renderedIds[id] = true;
-            }
         }
         target.state.rendered = false;
+        target.trigger('render');
 
         fiber.index = i + 1;
         fiber.current = null;
@@ -309,40 +268,30 @@ function flushViews() {
         }
     }
 
-    const callbacks = nextCallbacks;
-
     rendering = false;
-    nextCallbacks = null;
     isFlushingViews = false;
     fiber = newFiber();
-
-    for (let i = 0; i < renderedViews.length; i++) {
-        renderedViews[i].trigger('render');
-    }
-
-    if (callbacks) {
-        flushFunctions(callbacks);
-    }
 
     if (getCurrentTime() - renderStartTime > 50) {
         console.log('vm renderred', getCurrentTime() - renderStartTime);
     }
-}
 
-function flushFunctions(fns) {
-    let j = -1;
-    while (++j < fns.length) {
-        fns[j]();
+    let j = nextCallbackIndex;
+    while (++j < nextCallbacks.length) {
+        if (rendering) {
+            nextCallbackIndex = j - 1;
+            return;
+        } else {
+            nextCallbacks[j]();
+        }
     }
+
+    nextCallbackIndex = -1;
+    nextCallbacks = [];
 }
 
 export function nextTick(cb) {
     if (rendering) {
-        nextCallbacks
-            ? nextCallbacks.push(cb)
-            : (nextCallbacks = [cb]);
-    } else if (nextCallbacks) {
-        console.error('why nextCallbacks is not empty!!!');
         nextCallbacks.push(cb);
     } else {
         cb();

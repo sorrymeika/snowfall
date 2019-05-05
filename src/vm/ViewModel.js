@@ -300,9 +300,10 @@ export class ViewModel extends Model {
         this.state.rendered = true;
 
         let shouldReturn = false;
-        const compiler = this.compiler;
+        let rendered = [];
 
-        const renderRoot = (i, root, data, cache) => {
+        const compiler = this.compiler;
+        const renderRoot = (root, data, cache) => {
             const result = eachElement(root, data, (el, data) => {
                 if ((el.snViewModel && el.snViewModel != this)) return false;
 
@@ -316,29 +317,38 @@ export class ViewModel extends Model {
             }, cache);
 
             if (result) {
-                result.index = i;
-                fiber.current = result;
+                fiber.current = {
+                    ...result,
+                    target: this,
+                    rendered
+                };
                 shouldReturn = true;
 
                 return false;
             } else {
                 fiber.current = null;
+                rendered.push(root);
             }
         };
 
         if (fiber.current) {
             const {
-                index,
+                rendered: renderedElements,
                 stack,
                 firstLoop,
                 el,
                 data
             } = fiber.current;
 
-            if (renderRoot(index, el, data, { stack, firstLoop }) !== false) {
-                for (let i = index + 1; i < this.$el.length; i++) {
-                    if (renderRoot(i, this.$el[i], data) === false) {
-                        break;
+            rendered = rendered.concat(renderedElements);
+
+            if (renderRoot(el, data, { stack, firstLoop }) !== false) {
+                for (let i = 0; i < this.$el.length; i++) {
+                    const rootElement = this.$el[i];
+                    if (rendered.indexOf(rootElement) !== -1) {
+                        if (renderRoot(rootElement, data) === false) {
+                            break;
+                        }
                     }
                 }
             }
@@ -353,7 +363,7 @@ export class ViewModel extends Model {
             this.scope = scope;
             this.refs = {};
             this.$el && this.$el.each((i, el) => {
-                renderRoot(i, el, scope);
+                return renderRoot(el, scope);
             });
         }
 
