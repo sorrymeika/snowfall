@@ -3,9 +3,9 @@ import { source } from "./symbols";
 import { isObservable } from "../predicates";
 import { isString } from "../../utils";
 
-const propertyStore = new WeakMap();
+const reactiveProps = Symbol('reactiveProps');
 const initedClasses = new WeakMap();
-const instanceStore = new WeakMap();
+const instanceStore = new WeakSet();
 
 function getSource(obj, constructor) {
     if (process.env.NODE_ENV === "development") {
@@ -142,6 +142,10 @@ export default function initializer(obj, name, descriptor) {
     if (!initedClasses.has(obj)) {
         initedClasses.set(obj, true);
 
+        obj[reactiveProps] = obj[reactiveProps]
+            ? [...obj[reactiveProps]]
+            : [];
+
         hoistStaticMethods(obj.constructor);
 
         Object.defineProperty(obj, 'asModel', {
@@ -162,8 +166,9 @@ export default function initializer(obj, name, descriptor) {
                 }
 
                 let initProperties;
-                if (propertyStore.has(proto)) {
-                    const props = propertyStore.get(proto);
+
+                const props = proto[reactiveProps];
+                if (props) {
                     const instance = Object.create(this, props.reduce((result, { name, desc }) => {
                         result[name] = {
                             get() {
@@ -185,7 +190,7 @@ export default function initializer(obj, name, descriptor) {
                 const model = new Model(initProperties);
                 model.state.facade = this;
 
-                instanceStore.set(this, true);
+                instanceStore.add(this);
 
                 Object.defineProperty(this, source, {
                     get() {
@@ -198,13 +203,16 @@ export default function initializer(obj, name, descriptor) {
     }
 
     if (descriptor.initializer || descriptor.value !== undefined) {
-        let initProperties = propertyStore.get(obj);
-        if (!initProperties) {
-            propertyStore.set(obj, initProperties = []);
-        }
-        initProperties.push({
-            name: name,
+        const descriptors = obj[reactiveProps];
+        const index = descriptors.findIndex((item) => item.name === name);
+        const newDesc = {
+            name,
             desc: descriptor
-        });
+        };
+        if (index != -1) {
+            descriptors[index] = newDesc;
+        } else {
+            descriptors.push(newDesc);
+        }
     }
 }

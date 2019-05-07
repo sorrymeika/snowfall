@@ -8,7 +8,7 @@ import Emitter from "./Emitter";
 import { reactTo } from "./Reaction";
 
 const propertyKey = Symbol('propertyKey');
-const propertyStore = new WeakMap();
+const reactiveProps = Symbol('reactiveProps');
 const initedClasses = new WeakMap();
 
 /**
@@ -28,8 +28,11 @@ const observable = (initalValue, execute, descriptor) => {
     // 装饰器模式
     if (isString(execute)) {
         if (!initedClasses.has(initalValue)) {
-
             initedClasses.set(initalValue, true);
+
+            initalValue[reactiveProps] = initalValue[reactiveProps]
+                ? [...initalValue[reactiveProps]]
+                : [];
 
             Object.defineProperty(initalValue, propertyKey, {
                 configurable: true,
@@ -40,14 +43,17 @@ const observable = (initalValue, execute, descriptor) => {
                     }
 
                     let initProperties;
-                    if (propertyStore.has(proto)) {
-                        const props = propertyStore.get(proto);
+
+                    const props = proto[reactiveProps];
+                    if (props) {
                         const instance = Object.create(this, props.reduce((result, { name, desc }) => {
                             result[name] = {
                                 get() {
                                     return desc.initializer
                                         ? desc.initializer.call(instance)
-                                        : desc.value;
+                                        : desc.get
+                                            ? desc.get.call(instance)
+                                            : desc.value;
                                 }
                             };
                             return result;
@@ -74,15 +80,18 @@ const observable = (initalValue, execute, descriptor) => {
             });
         }
 
-        if (descriptor.initializer || descriptor.value !== undefined) {
-            let initProperties = propertyStore.get(initalValue);
-            if (!initProperties) {
-                propertyStore.set(initalValue, initProperties = []);
-            }
-            initProperties.push({
+        if (descriptor.initializer || descriptor.value !== undefined || descriptor.get) {
+            const descriptors = initalValue[reactiveProps];
+            const index = descriptors.findIndex(({ name }) => name === execute);
+            const newDesc = {
                 name: execute,
                 desc: descriptor
-            });
+            };
+            if (index != -1) {
+                descriptors[index] = newDesc;
+            } else {
+                descriptors.push(newDesc);
+            }
         }
 
         return {

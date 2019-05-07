@@ -17,7 +17,6 @@ export { registerComponent as component } from './compilers/component';
 export { getNodeVM } from './methods/getNodeVM';
 export { removeElementAttr } from './methods/removeElementAttr';
 export { findChildModel } from './methods/findChildModel';
+export { nextTick } from "./methods/enqueueUpdate";
 
 export * from './operators';
-export { default as compute } from './operators/compute';
-export { default as batch } from './operators/batch';
