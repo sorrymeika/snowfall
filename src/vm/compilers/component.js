@@ -72,7 +72,9 @@ export class ComponentCompiler {
                 }
                 node = node.nextSibling;
             }
-            instance = new Component(props, children);
+            instance = new Component({
+                attributes: props
+            }, children);
             instance.$el.appendTo(el);
 
             el.snComponentInstance = instance;

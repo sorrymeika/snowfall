@@ -231,6 +231,10 @@ function cloneRepeatElement(viewModel, source, snData) {
 
         if (node.snAttributes) clone.snAttributes = node.snAttributes;
         cloneEvents(viewModel, node, clone);
+
+        if (node.snComponent) clone.snComponent = node.snComponent;
+        if (node.snProps) clone.snProps = node.snProps;
+
         if (node.snRepeatCompiler) clone.snRepeatCompiler = node.snRepeatCompiler;
         if (node.snIfSource) {
             var snIfSource = cloneRepeatElement(viewModel, node.snIfSource, snData);
