@@ -1,6 +1,6 @@
 import { TEXT_NODE, ELEMENT_NODE } from '../../utils/dom';
 import { camelCase } from '../../utils/string';
-import ViewModel from '../ViewModel';
+import { ViewModel } from '../ViewModel';
 
 const registedComponents = {};
 
@@ -72,9 +72,12 @@ export class ComponentCompiler {
                 }
                 node = node.nextSibling;
             }
-            instance = new Component({
-                attributes: props
-            }, children);
+
+            instance = new Component(Component.prototype instanceof ViewModel
+                ? {
+                    attributes: props
+                }
+                : props, children);
             instance.$el.appendTo(el);
 
             el.snComponentInstance = instance;

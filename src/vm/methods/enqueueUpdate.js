@@ -231,7 +231,7 @@ function scheduleFlushViews() {
 }
 
 export function shouldContinueFlushingViews() {
-    return getCurrentTime() - flushingStartTime < 33;
+    return process.env.NODE_ENV === 'test' ? true : (getCurrentTime() - flushingStartTime < 33);
 }
 
 function flushViews() {
