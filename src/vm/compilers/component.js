@@ -53,15 +53,14 @@ export class ComponentCompiler {
         var el = nodeData.node;
         var fid = el.snProps;
         var props = !fid ? null : this.template.executeFunction(fid, nodeData.data);
+        var instance = el.snComponentInstance;
 
-        if (el.snComponentInstance) {
-            el.snComponentInstance.set(props);
-
-            nodeData.setRef(el.snComponentInstance);
+        if (instance) {
+            instance.set(props);
+            nodeData.setRef(instance);
         } else if (el.snComponent) {
             var children = [];
             var Component = el.snComponent;
-            var instance;
             var node = el.firstChild;
 
             while (node) {
