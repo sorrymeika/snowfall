@@ -4,7 +4,7 @@
 
 ### vm
 
-* snowfall是一个全面的MVVM框架，主要由 `Observer`、`ViewModel`、`Model`、`Collection`组成
+* snowfall是一个前端MVVM框架，主要由 `Observer`、`ViewModel`、`Model`、`Collection`组成
 * snowfall有自己的view层，但在React项目中，我们也可以用`model`层来替换`redux`
 
 
