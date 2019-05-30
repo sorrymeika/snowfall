@@ -1,6 +1,6 @@
 import { TEXT_NODE, ELEMENT_NODE } from '../../utils/dom';
 import { camelCase } from '../../utils/string';
-import ViewModel from '../ViewModel';
+import { ViewModel } from '../ViewModel';
 
 const registedComponents = {};
 
@@ -53,15 +53,14 @@ export class ComponentCompiler {
         var el = nodeData.node;
         var fid = el.snProps;
         var props = !fid ? null : this.template.executeFunction(fid, nodeData.data);
+        var instance = el.snComponentInstance;
 
-        if (el.snComponentInstance) {
-            el.snComponentInstance.set(props);
-
-            nodeData.setRef(el.snComponentInstance);
+        if (instance) {
+            instance.set(props);
+            nodeData.setRef(instance);
         } else if (el.snComponent) {
             var children = [];
             var Component = el.snComponent;
-            var instance;
             var node = el.firstChild;
 
             while (node) {
@@ -72,7 +71,12 @@ export class ComponentCompiler {
                 }
                 node = node.nextSibling;
             }
-            instance = new Component(props, children);
+
+            instance = new Component(Component.prototype instanceof ViewModel
+                ? {
+                    attributes: props
+                }
+                : props, children);
             instance.$el.appendTo(el);
 
             el.snComponentInstance = instance;

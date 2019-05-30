@@ -143,7 +143,7 @@ function respondInput($root, viewModel) {
             default:
         }
 
-        viewModel.dataOfElement(target, target.getAttribute(viewModel.eventId), target.value);
+        viewModel.elementData(target, target.getAttribute(viewModel.eventId), target.value);
     });
 }
 
@@ -239,7 +239,7 @@ export class EventAttributeCompiler {
                     ? match
                     : ($1 + $2.slice(0, -1) + ($2.length == 2 ? '' : ',') + 'e)');
             })
-            .replace(RE_SET, 'this.dataOfElement(e.currentTarget,\'$1\',$2)');
+            .replace(RE_SET, 'this.elementData(e.currentTarget,\'$1\',$2)');
 
         return this.template.compileToFunction(content, false);
     }

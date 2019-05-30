@@ -8,7 +8,7 @@ var rendering = false;
 const defer = Promise.prototype.then.bind(Promise.resolve());
 const doAsap = () => defer(flushCallbacks);
 
-const getCurrentTime = typeof performance !== 'undefined'
+const getCurrentTime = typeof performance !== 'undefined' && typeof performance.now === 'function'
     ? () => performance.now()
     : () => Date.now();
 
@@ -231,7 +231,7 @@ function scheduleFlushViews() {
 }
 
 export function shouldContinueFlushingViews() {
-    return getCurrentTime() - flushingStartTime < 33;
+    return process.env.NODE_ENV === 'test' ? true : (getCurrentTime() - flushingStartTime < 33);
 }
 
 function flushViews() {
@@ -268,7 +268,6 @@ function flushViews() {
         }
     }
 
-    rendering = false;
     isFlushingViews = false;
     fiber = newFiber();
 
@@ -276,18 +275,21 @@ function flushViews() {
         console.log('vm renderred', getCurrentTime() - renderStartTime);
     }
 
-    let j = nextCallbackIndex;
-    while (++j < nextCallbacks.length) {
-        if (rendering) {
-            nextCallbackIndex = j - 1;
-            return;
-        } else {
-            nextCallbacks[j]();
+    if (!dirts && !initializerIds.length) {
+        rendering = false;
+        let j = nextCallbackIndex;
+        while (++j < nextCallbacks.length) {
+            if (rendering) {
+                nextCallbackIndex = j - 1;
+                return;
+            } else {
+                nextCallbacks[j]();
+            }
         }
-    }
 
-    nextCallbackIndex = -1;
-    nextCallbacks = [];
+        nextCallbackIndex = -1;
+        nextCallbacks = [];
+    }
 }
 
 export function nextTick(cb) {

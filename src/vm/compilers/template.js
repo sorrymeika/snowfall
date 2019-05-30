@@ -217,10 +217,11 @@ function updateTextNode(el, val) {
             Array.isArray(item) ? res.push(...item) : res.push(item);
             return res;
         }, []).forEach(function (item) {
+            if (item == null) item = '';
             var nextSibling = node.nextSibling;
             if (nextSibling !== item) {
                 if (
-                    item.nodeType || (
+                    (item && item.nodeType) || (
                         (!nextSibling ||
                             nextSibling.nodeType !== TEXT_NODE ||
                             nextSibling.nodeValue !== "" + item) &&

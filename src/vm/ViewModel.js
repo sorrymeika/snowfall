@@ -111,26 +111,45 @@ export class ViewModel extends Model {
      * @param {Array} [children] 子节点列表
      */
     constructor(props = {}, children) {
-        super(props.attributes);
+        super(props.attributes || {});
 
-        this.components = props.components;
-        this.delegate = props.delegate;
         this.refs = {};
+        this.components = props.components || {};
+        if (props.delegate) {
+            this.delegate = props.delegate;
+        }
 
         this.compiler = new TemplateCompiler(this);
         this.children = children ? [].concat(children) : [];
         this.eventId = 'sn' + this.state.id + 'model';
-        this.repeats = {};
 
         props.el && (this.el = props.el);
-        this.el && this.template(this.el);
-
+        if (this.el) {
+            this.template(this.el);
+        }
         this.initialize && this.initialize(this.state.data);
     }
 
     template(el) {
-        var self = this;
-        var $el = $(el);
+        const self = this;
+
+        if (util.isString(el)) {
+            el = el.replace(/<sn-template\s+id=(["']?)(.+?)\1>([\s\S]+)<\/sn-template>/g, (match, q, id, template) => {
+                class Component extends ViewModel {
+                }
+                Component.prototype.base = this;
+                Component.prototype.el = template;
+                Object.defineProperty(Component.prototype, 'delegate', {
+                    get() {
+                        return self.delegate;
+                    }
+                });
+                this.components[id] = Component;
+                return "";
+            });
+        }
+
+        const $el = $(el);
         !this.$el && (this.$el = $());
 
         $el.each(function () {
@@ -263,7 +282,7 @@ export class ViewModel extends Model {
         return nodes;
     }
 
-    dataOfElement(el, keys, value) {
+    elementData(el, keys, value) {
         var attrs = keys.split('.');
         var model;
         var name = attrs[0];
@@ -355,7 +374,9 @@ export class ViewModel extends Model {
         } else {
             this.viewWillUpdate && this.viewWillUpdate();
 
-            const scope = Object.create(this.state.data);
+            const scope = this.base
+                ? Object.assign(Object.create(this.base.state.data), this.state.data)
+                : Object.create(this.state.data);
 
             scope.util = util;
             scope.$filter = $filter;
