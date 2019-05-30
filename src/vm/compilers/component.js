@@ -27,9 +27,10 @@ export class ComponentCompiler {
         if (nodeType == ELEMENT_NODE) {
             var propsVal;
             var componentName;
+            var nodeName = node.nodeName;
 
-            if (node.nodeName.slice(0, 3) === 'SN-') {
-                componentName = camelCase(node.nodeName.slice(3).toLowerCase());
+            if (nodeName.slice(0, 3) === 'SN-') {
+                componentName = camelCase(nodeName.slice(3).toLowerCase());
                 propsVal = node.getAttribute('props');
                 node.removeAttribute('props');
             } else if ((componentName = node.getAttribute('sn-component'))) {
@@ -72,7 +73,7 @@ export class ComponentCompiler {
                 node = node.nextSibling;
             }
 
-            instance = new Component(Component.prototype instanceof ViewModel
+            instance = new Component(Component.isTemplateComponent
                 ? {
                     attributes: props
                 }

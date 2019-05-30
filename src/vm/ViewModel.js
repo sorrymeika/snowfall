@@ -137,6 +137,7 @@ export class ViewModel extends Model {
             el = el.replace(/<sn-template\s+id=(["']?)(.+?)\1>([\s\S]+)<\/sn-template>/g, (match, q, id, template) => {
                 class Component extends ViewModel {
                 }
+                Component.isTemplateComponent = true;
                 Component.prototype.base = this;
                 Component.prototype.el = template;
                 Object.defineProperty(Component.prototype, 'delegate', {
