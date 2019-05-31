@@ -225,9 +225,22 @@ function enqueueRender(newView) {
     scheduleFlushViews();
 }
 
+let _scheduleFlushViews;
+
+if (typeof MessageChannel !== 'undefined' && /^\[object MessageChannelConstructor\]$|\[native code\]/.test(MessageChannel.toString())) {
+    const channel = new MessageChannel();
+    const port = channel.port2;
+    channel.port1.onmessage = flushViews;
+    _scheduleFlushViews = () => {
+        port.postMessage(1);
+    };
+} else {
+    _scheduleFlushViews = () => setTimeout(flushViews, 0);
+}
+
 function scheduleFlushViews() {
     flushingStartTime = getCurrentTime();
-    requestAnimationFrameWithTimeout(flushViews);
+    requestAnimationFrameWithTimeout(_scheduleFlushViews);
 }
 
 export function shouldContinueFlushingViews() {
