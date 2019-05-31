@@ -150,14 +150,14 @@ import { vm } from 'mall-core';
 const { Observer, ViewModel, Model, Collection, List, Emitter, State } = vm;
 
 var viewModel = new ViewModel({
-    el: `<div>
+    el: `
         <sn-template id="item"><li>{name}</li></sn-template>
         <h1>{title}</h1>
         <ul>
             <li sn-repeat="item in list">{item.name}</li>
             <sn-item props="{{ name: item.name }}" sn-repeat="item in list"></sn-item>
         </ul>
-    </div>`,
+    `,
     attributes: {
         title: '标题',
         list: [{
